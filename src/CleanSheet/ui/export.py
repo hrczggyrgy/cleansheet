@@ -25,55 +25,50 @@ def render_export(ws: Workspace) -> None:
             st.rerun()
         return
 
-    st.title("📥 Export Results")
-    st.caption("Download a complete, reproducible analysis bundle.")
+    st.title("📥 Download Report")
+    st.caption("Your analysis is complete. Download a reproducible report bundle.")
 
-    # Export options
-    with st.form("export_options_form"):
-        st.markdown("### Report Contents")
+    st.markdown("### What's included")
+    st.markdown("""
+    - **Analysis summary** — Your question, the answer, and key limitations
+    - **Statistical results** — Estimates, confidence intervals, and test details
+    - **Charts** — Visualizations from your analysis
+    - **Data dictionary** — Column descriptions and quality flags
+    - **Reproducibility files** — Recipe, run manifest, and software versions
+    """)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.checkbox("Markdown/HTML Report", value=True, disabled=True)
-            st.checkbox("Results CSV", value=True, disabled=True)
-            st.checkbox("Data Dictionary", value=True, disabled=True)
-        with col2:
-            st.checkbox("Quality Issues", value=True, disabled=True)
-            st.checkbox("Recipe JSON", value=True, disabled=True)
-            st.checkbox("Run Manifest", value=True, disabled=True)
+    # Simple options
+    include_charts = st.checkbox("Include charts", value=True, key="export_include_charts")
+    include_data = st.checkbox(
+        "Include prepared data (CSV)",
+        value=False,
+        help="Warning: Includes potentially sensitive data from your analysis",
+        key="export_include_data",
+    )
 
-        st.markdown("### Figures")
-        include_figures = st.checkbox("Include Plot PNGs", value=True, key="export_include_figures")
+    st.divider()
 
-        st.markdown("### Data")
-        include_data = st.checkbox("Include Prepared Data (CSV)", value=False,
-                                   help="Warning: Includes potentially sensitive data",
-                                   key="export_include_data")
-
-        st.markdown("### Format")
-        st.radio("Bundle format", ["ZIP (all files)"], disabled=True)
-
-        submitted = st.form_submit_button("Generate Export", type="primary", use_container_width=True)
-
-        if submitted:
-            st.session_state._export_config = {
-                "include_data": include_data,
-                "include_figures": include_figures,
-            }
-            st.session_state.generate_export = True
-
-    # Generate export outside the form
-    if st.session_state.get("generate_export"):
-        plots = st.session_state.get("plots", [])
-        config = st.session_state.get("_export_config", {})
+    # Generate and download
+    if st.button("📦 Prepare Report", type="primary", use_container_width=True):
         _generate_export(
-            ws, dataset_ref, import_spec, column_roles, recipe,
-            results, config.get("include_data", False), config.get("include_figures", True),
-            plots
+            ws, dataset_ref, import_spec, st.session_state.get("column_roles", []),
+            st.session_state.get("recipe", []), st.session_state.get("results"),
+            st.session_state.get("plots", []),
+            include_charts, include_data
         )
-        st.session_state.generate_export = False
 
-    # Back button
+    # Show download if ready
+    if "export_zip_data" in st.session_state:
+        st.success("✅ Report ready!")
+        st.download_button(
+            "⬇️ Download Report",
+            data=st.session_state.export_zip_data,
+            file_name=st.session_state.export_filename,
+            mime="application/zip",
+            use_container_width=True,
+        )
+
+    st.divider()
     if st.button("← Back to Results"):
         st.session_state.current_stage = JobStatus.COMPLETE.value
         st.rerun()
@@ -86,12 +81,12 @@ def _generate_export(
     column_roles,
     recipe,
     results,
-    include_data: bool,
-    include_figures: bool,
     plots: list,
+    include_charts: bool,
+    include_data: bool,
 ) -> None:
     """Generate the export bundle."""
-    with st.spinner("Generating export bundle..."):
+    with st.spinner("Generating report..."):
         try:
             # Run profiling for data dictionary
             profile = run_profiling(workspace, dataset_ref)
@@ -106,39 +101,17 @@ def _generate_export(
                 recipe=recipe,
                 profile=profile,
                 include_data=include_data,
-                plots=plots,
+                plots=plots if include_charts else [],
             )
 
             # Read the zip file
             zip_data = export_path.read_bytes()
 
-            st.success(f"✅ Export ready! ({len(zip_data) / 1024:.1f} KB)")
+            # Store in session state for persistent download
+            st.session_state.export_zip_data = zip_data
+            st.session_state.export_filename = export_path.name
 
-            # Download button
-            st.download_button(
-                "⬇️ Download Export Bundle",
-                data=zip_data,
-                file_name=export_path.name,
-                mime="application/zip",
-                use_container_width=True,
-            )
-
-            # Show contents
-            st.markdown("### Bundle Contents")
-            st.code("""
-cleansheet_export_<run_id>.zip
-├── report.md              # Markdown report
-├── report.html            # HTML report with styling
-├── results.csv            # Statistical results table
-├── data_dictionary.csv    # Column metadata & summaries
-├── quality_issues.csv     # Data quality flags
-├── recipe.json            # Preparation recipe
-├── run_manifest.json      # Reproducibility manifest
-└── figures/
-    ├── plot_1_boxplot.png
-    ├── plot_2_scatterplot.png
-    └── ...
-""")
+            st.rerun()
 
         except Exception as e:
             st.error(f"Export failed: {e}")

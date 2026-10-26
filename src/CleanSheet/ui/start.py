@@ -43,6 +43,8 @@ def render_start(ws: Workspace) -> None:
                         "filename": uploaded.name,
                         "format": fmt,
                     }
+                    # Store raw data for re-parsing
+                    st.session_state.raw_upload_data = data
                     st.success(f"✅ Valid {fmt.upper()} file ({len(data) / 1024 / 1024:.1f} MB)")
                 except Exception as e:
                     st.error(f"❌ {e}")

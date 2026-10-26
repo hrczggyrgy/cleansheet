@@ -18,6 +18,19 @@ from CleanSheet.ui.export import render_export
 settings = get_settings()
 
 
+# Friendly step labels for user-facing navigation
+STEP_LABELS = {
+    JobStatus.EMPTY.value: "1. Add data",
+    JobStatus.IMPORT_REVIEW.value: "2. Review data",
+    JobStatus.DATA_READY.value: "3. Prepare data (optional)",
+    JobStatus.PLAN_READY.value: "4. Ask a question",
+    JobStatus.RUNNING.value: "5. Analyzing…",
+    JobStatus.COMPLETE.value: "5. Understand results",
+    JobStatus.PARTIAL.value: "5. Understand results",
+    JobStatus.EXPORT_READY.value: "6. Download report",
+}
+
+
 def init_session() -> None:
     """Initialize session state."""
     if "session_id" not in st.session_state:
@@ -35,6 +48,10 @@ def init_session() -> None:
         st.session_state.plots = []
         st.session_state.warnings = []
         st.session_state.stale_results = False
+        # Pending states that need validation before execution
+        st.session_state.pending_analysis_request = None
+        st.session_state.pending_import_spec = None
+        st.session_state.show_reset_confirm = False
 
 
 def get_or_create_workspace() -> Workspace:
@@ -52,8 +69,14 @@ def get_or_create_workspace() -> Workspace:
     return ws
 
 
-def reset_session() -> None:
+def reset_session(confirm: bool = False) -> None:
     """Reset session state for new analysis."""
+    if not confirm:
+        # Show confirmation dialog
+        st.session_state.show_reset_confirm = True
+        st.rerun()
+        return
+
     ws_manager = get_workspace_manager()
     if st.session_state.workspace_id:
         ws_manager.remove(st.session_state.workspace_id, force=True)
@@ -75,24 +98,26 @@ def reset_session() -> None:
     st.session_state.plots = []
     st.session_state.warnings = []
     st.session_state.stale_results = False
+    st.session_state.pending_analysis_request = None
+    st.session_state.pending_import_spec = None
+    st.session_state.show_reset_confirm = False
 
 
 def render_sidebar() -> None:
     """Render sidebar with session info and navigation."""
     with st.sidebar:
         st.markdown("### CleanSheet")
-        session_id = st.session_state.get("session_id", "")
-        st.caption(f"Session: `{session_id[:8]}`")
+        st.caption("Understand your data without writing code")
 
         # Current dataset
         dataset_ref = st.session_state.get("dataset_ref")
         if dataset_ref:
             ref = dataset_ref
-            st.markdown("**Dataset**")
+            st.markdown("**Your data**")
             st.caption(f"{ref.row_count:,} rows × {ref.column_count} cols")
-            st.caption(f"Hash: `{ref.source_sha256[:12]}`")
+            st.caption(f"Format: {ref.format.upper()}")
 
-        # Progress indicator
+        # Progress indicator with friendly labels
         stages = [
             JobStatus.EMPTY.value,
             JobStatus.IMPORT_REVIEW.value,
@@ -107,26 +132,46 @@ def render_sidebar() -> None:
 
         st.markdown("**Progress**")
         for i, stage in enumerate(stages):
-            if i <= current_idx:
-                st.markdown(f"✅ {stage.replace('_', ' ').title()}")
+            label = STEP_LABELS.get(stage, stage.replace('_', ' ').title())
+            if i < current_idx:
+                st.markdown(f"✅ {label}")
+            elif i == current_idx:
+                st.markdown(f"▶️ **{label}**")
             else:
-                st.markdown(f"⬜ {stage.replace('_', ' ').title()}")
+                st.markdown(f"⬜ {label}")
 
         # Actions
         st.divider()
-        if st.button("🔄 New Analysis", use_container_width=True, type="secondary"):
-            reset_session()
-            st.rerun()
+        if st.button("🔄 Start over", use_container_width=True, type="secondary"):
+            reset_session(confirm=False)
+
+        if st.session_state.get("show_reset_confirm"):
+            st.warning("This will clear your current analysis. Are you sure?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Yes, start over", type="primary", use_container_width=True):
+                    reset_session(confirm=True)
+            with col2:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.show_reset_confirm = False
+                    st.rerun()
 
         if current_stage in [JobStatus.COMPLETE.value, JobStatus.EXPORT_READY.value]:
-            if st.button("📥 Export Results", use_container_width=True, type="primary"):
+            if st.button("📥 Download report", use_container_width=True, type="primary"):
                 st.session_state.current_stage = JobStatus.EXPORT_READY.value
                 st.rerun()
+
+        # Technical details (collapsed)
+        with st.expander("Technical details"):
+            session_id = st.session_state.get("session_id", "")
+            st.caption(f"Session: `{session_id[:8]}`")
+            if dataset_ref:
+                st.caption(f"Source hash: `{dataset_ref.source_sha256[:12]}`")
 
         # Demo mode indicator
         if settings.demo_mode:
             st.divider()
-            st.info("🎭 Demo Mode - Using bundled data")
+            st.info("🎭 Demo Mode — Using bundled data")
 
 
 def main() -> None:
@@ -160,8 +205,8 @@ def main() -> None:
     else:
         st.error(f"Unknown stage: {stage}")
         if st.button("Reset Session"):
-            reset_session()
-            st.rerun()
+            reset_session(confirm=True)
+        st.rerun()
 
 
 if __name__ == "__main__":

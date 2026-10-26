@@ -43,69 +43,51 @@ def render_question(ws: Workspace) -> None:
     date_cols = [c for c, r in role_map.items() if r == "date"]
     id_cols = [c for c, r in role_map.items() if r == "identifier"]
 
-    # Question cards
+    # Question cards - simplified to 4 main goals
     st.markdown("### What would you like to know?")
 
-    questions = [
+    question_cards = [
         {
             "goal": Goal.COMPARE_TWO_MEANS,
-            "label": "Compare two groups",
+            "label": "Compare groups",
             "icon": "📊",
-            "description": "Compare a numeric outcome between two groups (e.g., treatment vs control)",
+            "description": "Compare a numeric outcome between two groups",
             "requires": ["continuous outcome", "categorical group (2 levels)"],
         },
         {
             "goal": Goal.COMPARE_PAIRED_MEANS,
             "label": "Compare before/after",
             "icon": "🔄",
-            "description": "Compare the same units measured twice (e.g., pre/post treatment)",
+            "description": "Compare the same units measured twice",
             "requires": ["continuous outcome", "pair identifier", "occasion variable"],
         },
         {
             "goal": Goal.EXPLORE_LINEAR_RELATIONSHIP,
-            "label": "Explore linear relationship",
+            "label": "Explore a relationship",
             "icon": "📈",
-            "description": "Measure linear association between two numeric variables",
-            "requires": ["two continuous variables"],
-        },
-        {
-            "goal": Goal.EXPLORE_ORDERED_RELATIONSHIP,
-            "label": "Explore ordered relationship",
-            "icon": "📉",
-            "description": "Measure monotonic association (Spearman) for continuous or ordinal variables",
-            "requires": ["two continuous or ordinal variables"],
-        },
-        {
-            "goal": Goal.CATEGORICAL_ASSOCIATION,
-            "label": "Test category association",
-            "icon": "🔗",
-            "description": "Test if two categorical variables are associated",
-            "requires": ["two categorical variables"],
-        },
-        {
-            "goal": Goal.SPARSE_2X2_TABLE,
-            "label": "Analyze 2×2 table",
-            "icon": "🎯",
-            "description": "Fisher's exact test for sparse 2×2 contingency tables",
-            "requires": ["two binary categorical variables"],
+            "description": "Explore how two variables relate",
+            "requires": ["two numeric or ordinal variables"],
         },
         {
             "goal": Goal.DESCRIBE_DATA,
             "label": "Describe my data",
             "icon": "📋",
-            "description": "Get comprehensive descriptive statistics and visualizations",
+            "description": "Get comprehensive summaries and visualizations",
             "requires": ["any data"],
         },
     ]
 
     # Display as cards
-    cols = st.columns(3)
-    for i, q in enumerate(questions):
-        with cols[i % 3], st.container(border=True):
+    cols = st.columns(2)
+    for i, q in enumerate(question_cards):
+        with cols[i % 2], st.container(border=True):
             st.markdown(f"### {q['icon']} {q['label']}")
             st.caption(q["description"])
             st.caption(f"Requires: {', '.join(q['requires'])}")
             if st.button("Select", key=f"select_{q['goal'].value}", use_container_width=True):
+                # Invalidate any pending analysis when goal changes
+                if st.session_state.get("selected_goal") != q["goal"]:
+                    _invalidate_pending_analysis()
                 st.session_state.selected_goal = q["goal"]
                 st.rerun()
 
@@ -117,10 +99,22 @@ def render_question(ws: Workspace) -> None:
 
     # Back button
     if st.button("← Back to Preparation"):
-        st.session_state.current_stage = JobStatus.DATA_READY
+        st.session_state.current_stage = JobStatus.DATA_READY.value
         if "selected_goal" in st.session_state:
             del st.session_state.selected_goal
         st.rerun()
+
+
+def _invalidate_pending_analysis() -> None:
+    """Invalidate any pending analysis when configuration changes."""
+    if "pending_analysis_request" in st.session_state:
+        del st.session_state.pending_analysis_request
+    if "analysis_plan" in st.session_state:
+        del st.session_state.analysis_plan
+    if "results" in st.session_state:
+        st.session_state.results = None
+    if "plots" in st.session_state:
+        st.session_state.plots = []
 
 
 def _render_goal_config(
@@ -136,66 +130,87 @@ def _render_goal_config(
     dataset_ref,
 ) -> None:
     """Render configuration for selected goal."""
-    st.markdown(f"### Configure: {goal.value.replace('_', ' ').title()}")
 
+    # Define sub-goals for "Explore a relationship"
+    if goal == Goal.EXPLORE_LINEAR_RELATIONSHIP:
+        sub_goals = {
+            Goal.EXPLORE_LINEAR_RELATIONSHIP: ("Linear relationship (Pearson)", "Measures linear association between two numeric variables", "two continuous variables"),
+            Goal.EXPLORE_ORDERED_RELATIONSHIP: ("Ordered relationship (Spearman)", "Measures monotonic association for numeric or ordinal variables", "two numeric or ordinal variables"),
+        }
+    elif goal == Goal.COMPARE_TWO_MEANS:
+        sub_goals = {goal: (goal.value.replace('_', ' ').title(), "Compare a numeric outcome between two groups", "continuous outcome, categorical group (2 levels)")}
+    elif goal == Goal.COMPARE_PAIRED_MEANS:
+        sub_goals = {goal: (goal.value.replace('_', ' ').title(), "Compare the same units measured twice", "continuous outcome, pair identifier, occasion variable")}
+    else:  # DESCRIBE_DATA
+        sub_goals = {goal: (goal.value.replace('_', ' ').title(), "Get comprehensive summaries and visualizations", "any data")}
+
+    # Show sub-goal selection for Explore relationship
+    actual_goal = goal
+    if goal == Goal.EXPLORE_LINEAR_RELATIONSHIP:
+        st.markdown("### What kind of relationship?")
+        sub_goal_labels = {k: v[0] for k, v in sub_goals.items()}
+        selected_sub = st.radio(
+            "Relationship type",
+            options=list(sub_goals.keys()),
+            format_func=lambda k: sub_goal_labels[k],
+            horizontal=True,
+        )
+        actual_goal = selected_sub
+        st.caption(sub_goals[actual_goal][1])
+        st.caption(f"Requires: {sub_goals[actual_goal][2]}")
+    else:
+        st.caption(sub_goals[actual_goal][1])
+        st.caption(f"Requires: {sub_goals[actual_goal][2]}")
+
+    # Configuration form
     with st.form("analysis_config"):
         variables = {}
         group_levels = None
         contrast = None
-        pair_id = None
-        occasion = None
 
-        if goal == Goal.COMPARE_TWO_MEANS:
+        if actual_goal == Goal.COMPARE_TWO_MEANS:
             st.write("**Compare a numeric outcome between two groups**")
-            variables["outcome"] = st.selectbox("Outcome (continuous)", continuous_cols)
-            variables["group"] = st.selectbox("Group (categorical)", categorical_cols)
+            variables["outcome"] = st.selectbox("Outcome (continuous)", continuous_cols, key="outcome_select")
+            variables["group"] = st.selectbox("Group (categorical)", categorical_cols, key="group_select")
 
             if variables["group"] in df.columns:
                 levels = df[variables["group"]].unique().to_list()
                 if len(levels) >= 2:
-                    group_levels = st.multiselect("Select two groups", levels, default=levels[:2])
+                    group_levels = st.multiselect("Select two groups", levels, default=levels[:2], key="group_levels")
                     if len(group_levels) == 2:
                         contrast = st.selectbox(
                             "Contrast direction",
                             [f"{group_levels[0]} minus {group_levels[1]}", f"{group_levels[1]} minus {group_levels[0]}"],
+                            key="contrast_select",
                         )
                         contrast = contrast.replace(" minus ", "_minus_")
 
-        elif goal == Goal.COMPARE_PAIRED_MEANS:
+        elif actual_goal == Goal.COMPARE_PAIRED_MEANS:
             st.write("**Compare the same units measured twice**")
-            variables["outcome"] = st.selectbox("Outcome (continuous)", continuous_cols)
-            variables["pair_id"] = st.selectbox("Pair identifier", id_cols + categorical_cols)
-            variables["occasion"] = st.selectbox("Occasion (time/condition)", date_cols + categorical_cols)
+            variables["outcome"] = st.selectbox("Outcome (continuous)", continuous_cols, key="outcome_paired")
+            variables["pair_id"] = st.selectbox("Pair identifier", id_cols + categorical_cols, key="pair_id")
+            variables["occasion"] = st.selectbox("Occasion (time/condition)", date_cols + categorical_cols, key="occasion")
 
             if variables["occasion"] in df.columns:
                 occasions = df[variables["occasion"]].unique().to_list()
                 if len(occasions) >= 2:
-                    selected = st.multiselect("Select two occasions", occasions, default=occasions[:2])
+                    selected = st.multiselect("Select two occasions", occasions, default=occasions[:2], key="occasions_select")
                     if len(selected) == 2:
                         contrast = st.selectbox(
                             "Contrast direction",
                             [f"{selected[0]} minus {selected[1]}", f"{selected[1]} minus {selected[0]}"],
+                            key="contrast_paired",
                         )
                         contrast = contrast.replace(" minus ", "_minus_")
 
-        elif goal in (Goal.EXPLORE_LINEAR_RELATIONSHIP, Goal.EXPLORE_ORDERED_RELATIONSHIP):
-            st.write(f"**Explore {'linear' if goal == Goal.EXPLORE_LINEAR_RELATIONSHIP else 'monotonic'} relationship**")
-            variables["outcome"] = st.selectbox("Variable X", continuous_cols + ordinal_cols)
-            variables["predictor"] = st.selectbox("Variable Y", [c for c in continuous_cols + ordinal_cols if c != variables["outcome"]])
+        elif actual_goal in (Goal.EXPLORE_LINEAR_RELATIONSHIP, Goal.EXPLORE_ORDERED_RELATIONSHIP):
+            st.write(f"**Explore {'linear' if actual_goal == Goal.EXPLORE_LINEAR_RELATIONSHIP else 'monotonic'} relationship**")
+            variables["outcome"] = st.selectbox("Variable X", continuous_cols + ordinal_cols, key="outcome_corr")
+            variables["predictor"] = st.selectbox("Variable Y", [c for c in continuous_cols + ordinal_cols if c != variables["outcome"]], key="predictor_corr")
 
-        elif goal == Goal.CATEGORICAL_ASSOCIATION:
-            st.write("**Test association between two categorical variables**")
-            variables["outcome"] = st.selectbox("Row variable", categorical_cols)
-            variables["group"] = st.selectbox("Column variable", [c for c in categorical_cols if c != variables["outcome"]])
-
-        elif goal == Goal.SPARSE_2X2_TABLE:
-            st.write("**Fisher's exact test for 2×2 table**")
-            variables["outcome"] = st.selectbox("Row variable (binary)", [c for c in categorical_cols if df[c].n_unique() == 2])
-            variables["group"] = st.selectbox("Column variable (binary)", [c for c in categorical_cols if df[c].n_unique() == 2 and c != variables["outcome"]])
-
-        elif goal == Goal.DESCRIBE_DATA:
+        elif actual_goal == Goal.DESCRIBE_DATA:
             st.write("**Generate descriptive statistics for all variables**")
-            # No variables needed
+            # No variables needed - we'll add a dummy for validation
 
         # Study design
         st.markdown("### Study Design")
@@ -208,6 +223,7 @@ def _render_goal_config(
                 StudyDesign.UNKNOWN: "Unknown / Not sure",
             }[x],
             horizontal=False,
+            key="study_design_radio",
         )
 
         if study_design == StudyDesign.UNKNOWN:
@@ -217,40 +233,40 @@ def _render_goal_config(
         with st.expander("Advanced Options"):
             col1, col2 = st.columns(2)
             with col1:
-                confidence = st.slider("Confidence level", 0.80, 0.99, 0.95, 0.01)
-                alternative = st.selectbox("Alternative hypothesis", [a.value for a in Alternative])
+                confidence = st.slider("Confidence level", 0.80, 0.99, 0.95, 0.01, key="confidence_slider")
+                alternative = st.selectbox("Alternative hypothesis", [a.value for a in Alternative], key="alternative_select")
             with col2:
-                missing_policy = st.selectbox("Missing data policy", [m.value for m in MissingPolicy])
-                nonfinite_policy = st.selectbox("Non-finite values", [n.value for n in NonFinitePolicy])
+                missing_policy = st.selectbox("Missing data policy", [m.value for m in MissingPolicy], key="missing_policy")
+                nonfinite_policy = st.selectbox("Non-finite values", [n.value for n in NonFinitePolicy], key="nonfinite_policy")
 
-            seed = st.number_input("Random seed", 0, 2**31 - 1, 42)
+            seed = st.number_input("Random seed", 0, 2**31 - 1, 42, key="seed_input")
 
         # Submit
         submitted = st.form_submit_button("Check Eligibility", type="primary", use_container_width=True)
 
         if submitted:
             # Validate group levels
-            if goal == Goal.COMPARE_TWO_MEANS and (not group_levels or len(group_levels) != 2):
+            if actual_goal == Goal.COMPARE_TWO_MEANS and (not group_levels or len(group_levels) != 2):
                 st.error("Please select exactly two groups")
                 return
 
             # For paired means, get pair_id and occasion from variables
             _pair_id = variables.get("pair_id")
             _occasion = variables.get("occasion")
-            if goal == Goal.COMPARE_PAIRED_MEANS:
+            if actual_goal == Goal.COMPARE_PAIRED_MEANS:
                 if not _pair_id or not _occasion:
                     st.error("Please provide pair identifier and occasion")
                     return
 
             # Build request
             request = AnalysisRequest(
-                goal=goal,
-                variables=variables,
+                goal=actual_goal,
+                variables=variables if actual_goal != Goal.DESCRIBE_DATA else {"dummy": continuous_cols[0] if continuous_cols else (categorical_cols[0] if categorical_cols else "x")},
                 group_levels=group_levels,
                 contrast=contrast,
                 study_design=study_design,
                 design_confirmation_source="user",
-                estimand=_get_estimand_description(goal, variables),
+                estimand=_get_estimand_description(actual_goal, variables),
                 missing_policy=MissingPolicy(missing_policy),
                 nonfinite_policy=NonFinitePolicy(nonfinite_policy),
                 alternative=Alternative(alternative),

@@ -51,6 +51,9 @@ def render_results(ws: Workspace) -> None:
         st.info("Analysis in progress...")
         return
 
+    # Lead with the question and plain-language summary
+    _render_summary(results, analysis_plan)
+
     # Display results
     for i, stat_result in enumerate(results.statistical_results):
         _render_statistical_result(stat_result, analysis_plan, i)
@@ -68,7 +71,7 @@ def render_results(ws: Workspace) -> None:
     st.divider()
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("← New Question", use_container_width=True):
+        if st.button("← Change question", use_container_width=True):
             st.session_state.current_stage = JobStatus.PLAN_READY.value
             st.session_state.results = None
             st.session_state.plots = []
@@ -83,14 +86,147 @@ def render_results(ws: Workspace) -> None:
             st.rerun()
 
     with col3:
-        if st.button("Continue to Export →", type="primary", use_container_width=True):
+        if st.button("Download report →", type="primary", use_container_width=True):
             st.session_state.current_stage = JobStatus.EXPORT_READY.value
             st.rerun()
 
 
+def _render_summary(results, plan) -> None:
+    """Render plain-language summary at the top."""
+    if not results.statistical_results:
+        return
+
+    stat = results.statistical_results[0]
+    goal = plan.goal
+
+    # Build plain-language answer
+    if goal.value == "compare_two_means":
+        _render_compare_summary(stat, plan)
+    elif goal.value == "compare_paired_means":
+        _render_paired_summary(stat, plan)
+    elif goal.value in ("explore_linear_relationship", "explore_ordered_relationship"):
+        _render_correlation_summary(stat, plan)
+    elif goal.value in ("categorical_association", "sparse_2x2_table"):
+        _render_categorical_summary(stat, plan)
+    else:
+        _render_descriptive_summary(stat, plan)
+
+    # Show sample counts and exclusions prominently
+    st.markdown("### Data used")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Observations included", sum(stat.group_counts.values()))
+    with col2:
+        excluded = sum(stat.exclusions.values()) if stat.exclusions else 0
+        if excluded > 0:
+            st.metric("Observations excluded", excluded)
+            with st.expander("Why were observations excluded?"):
+                for k, v in stat.exclusions.items():
+                    st.write(f"- {k}: {v}")
+        else:
+            st.metric("Observations excluded", 0)
+
+
+def _render_compare_summary(stat, plan) -> None:
+    """Render summary for two-group comparison."""
+    outcome = plan.variables.get("outcome", "outcome")
+    group = plan.variables.get("group", "group")
+    levels = plan.group_levels or []
+
+    if stat.estimate is not None and stat.interval and stat.interval_status == "computed":
+        direction = "higher" if stat.estimate > 0 else "lower"
+        st.markdown(f"""
+        **In the analyzed data, {levels[0] if stat.estimate > 0 else levels[1]} averaged {abs(stat.estimate):.2f} units {direction} than {levels[1] if stat.estimate > 0 else levels[0]} on {outcome}.**  
+
+        The {plan.confidence_level:.0%} confidence interval for the difference is **[{stat.interval[0]:.2f}, {stat.interval[1]:.2f}]**.
+
+        *This comparison does not establish that group membership caused the difference.*
+        """)
+    else:
+        st.info("Unable to compute a reliable estimate for this comparison.")
+
+
+def _render_paired_summary(stat, plan) -> None:
+    """Render summary for paired comparison."""
+    outcome = plan.variables.get("outcome", "outcome")
+    occasion = plan.variables.get("occasion", "occasion")
+
+    if stat.estimate is not None and stat.interval and stat.interval_status == "computed":
+        direction = "increased" if stat.estimate > 0 else "decreased"
+        st.markdown(f"""
+        **In the analyzed data, {outcome} {direction} by {abs(stat.estimate):.2f} units on average from {plan.contrast.split('_minus_')[1] if stat.estimate < 0 else plan.contrast.split('_minus_')[0]} to {plan.contrast.split('_minus_')[0] if stat.estimate < 0 else plan.contrast.split('_minus_')[1]}.**  
+
+        The {plan.confidence_level:.0%} confidence interval for the mean paired difference is **[{stat.interval[0]:.2f}, {stat.interval[1]:.2f}]**.
+
+        *This comparison does not establish that the occasion caused the change.*
+        """)
+    else:
+        st.info("Unable to compute a reliable estimate for this comparison.")
+
+
+def _render_correlation_summary(stat, plan) -> None:
+    """Render summary for correlation."""
+    x = plan.variables.get("outcome", "X")
+    y = plan.variables.get("predictor", "Y")
+    method_name = "Pearson" if stat.method.value == "pearson_r" else "Spearman"
+
+    if stat.estimate is not None:
+        strength = _interpret_strength(abs(stat.estimate))
+        direction = "positive" if stat.estimate > 0 else "negative"
+        st.markdown(f"""
+        **There is a {strength} {direction} {method_name} correlation ({stat.estimate:.3f}) between {x} and {y}.**  
+
+        The {stat.interval_status == "computed" and f"{stat.confidence_level:.0%} confidence interval is [{stat.interval[0]:.3f}, {stat.interval[1]:.3f}]" if stat.interval and stat.interval_status == "computed" else "A confidence interval could not be computed."}
+
+        *Correlation does not imply causation. This analysis does not establish that changes in one variable cause changes in the other.*
+        """)
+    else:
+        st.info("Unable to compute a reliable correlation estimate.")
+
+
+def _render_categorical_summary(stat, plan) -> None:
+    """Render summary for categorical association."""
+    row = plan.variables.get("outcome", "row")
+    col = plan.variables.get("group", "column")
+
+    if stat.estimate is not None:
+        st.markdown(f"""
+        **There is an association between {row} and {col}.**  
+
+        The {stat.method.value.replace('_', ' ').title()} test {'found a statistically significant association' if stat.p_value and stat.p_value < 0.05 else 'did not find a statistically significant association'} (p = {stat.p_value:.4f if stat.p_value else 'N/A'}).
+
+        *Association does not imply causation.*
+        """)
+    else:
+        st.info("Unable to compute a reliable association estimate.")
+
+
+def _render_descriptive_summary(stat, plan) -> None:
+    """Render summary for descriptive analysis."""
+    st.markdown("""
+    **Descriptive statistics for your dataset.**  
+
+    Review the tables and charts below to understand the distribution and quality of your variables.
+    """)
+
+
+def _interpret_strength(r: float) -> str:
+    """Interpret correlation strength."""
+    if r < 0.1:
+        return "negligible"
+    elif r < 0.3:
+        return "weak"
+    elif r < 0.5:
+        return "moderate"
+    elif r < 0.7:
+        return "strong"
+    else:
+        return "very strong"
+
+
 def _render_statistical_result(result, plan, index: int) -> None:
     """Render a single statistical result."""
-    st.markdown(f"### Analysis {index + 1}: {result.method.value.replace('_', ' ').title()}")
+    st.markdown(f"### {result.method.value.replace('_', ' ').title()}")
 
     # Main metrics
     cols = st.columns(4)
