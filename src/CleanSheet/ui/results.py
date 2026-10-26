@@ -360,7 +360,7 @@ def _generate_result_plots(
 def _render_plots(plots) -> None:
     """Render plot results."""
     for plot in plots:
-        st.image(plot.png_bytes, caption=f"{plot.spec.plot_type.value.replace('_', ' ').title()}", use_column_width=True)
+        st.image(plot.png_bytes, caption=f"{plot.spec.plot_type.value.replace('_', ' ').title()}", width="stretch")
 
         # Download button
         st.download_button(
