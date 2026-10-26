@@ -377,8 +377,9 @@ def check_eligibility(
                 warnings.append(gate.description)
 
     # For UNKNOWN study design, block inference (except descriptive)
-    if request.study_design == StudyDesign.UNKNOWN and request.goal != Goal.DESCRIBE_DATA:
-        allowed = False
+    unknown_design_block = request.study_design == StudyDesign.UNKNOWN and request.goal != Goal.DESCRIBE_DATA
+    if unknown_design_block:
+        rule_ids.append("unknown_study_design")
         reasons.append("Study design is unknown; only descriptive analysis is allowed")
 
     # Determine suggested method

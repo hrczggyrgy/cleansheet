@@ -104,9 +104,9 @@ class WelchTTestAdapter(TestAdapter):
             effect_size=float(cohen_d),
             effect_size_interpretation=_interpret_cohen_d(cohen_d),
             assumption_checks={
-                "normality_group1": _check_normality(group1),
-                "normality_group2": _check_normality(group2),
-                "variance_ratio": float(np.var(group1, ddof=1) / np.var(group2, ddof=1)) if np.var(group2, ddof=1) > 0 else None,
+                "normality_group1": _check_normality(group_first),
+                "normality_group2": _check_normality(group_second),
+                "variance_ratio": float(np.var(group_first, ddof=1) / np.var(group_second, ddof=1)) if np.var(group_second, ddof=1) > 0 else None,
             },
         )
 
@@ -126,7 +126,7 @@ class PairedTTestAdapter(TestAdapter):
         wide = df.pivot(
             values=outcome_col,
             index=pair_col,
-            columns=occasion_col,
+            on=occasion_col,
         ).drop_nulls()
 
         if wide.width < 3:
@@ -352,7 +352,7 @@ class ChiSquareAdapter(TestAdapter):
         ct = data.group_by(x_col, y_col).len().pivot(
             values="len",
             index=x_col,
-            columns=y_col,
+            on=y_col,
         ).fill_null(0)
 
         row_names = ct[x_col].to_list()
@@ -405,7 +405,7 @@ class FisherExactAdapter(TestAdapter):
         ct = data.group_by(x_col, y_col).len().pivot(
             values="len",
             index=x_col,
-            columns=y_col,
+            on=y_col,
         ).fill_null(0)
 
         row_names = ct[x_col].to_list()
