@@ -105,12 +105,17 @@ class LazyExecutor:
         lf = self.source_lf.select(columns)
 
         # Stable sampling: sort by row index, then sample
-        lf = lf.with_row_index("_row_idx").sort("_row_idx")
-
-        # Use deterministic sampling
-        lf = lf.sample(n=min(max_rows, self.settings.max_plot_points), seed=seed, with_replacement=False)
-
-        return lf.collect(engine="streaming" if self.settings.polars_streaming else "in-memory")
+        # Note: sample() is not available on LazyFrame in Polars 2.0, so collect first
+        df = lf.collect(engine="streaming" if self.settings.polars_streaming else "in-memory")
+        
+        # Add row index for stable sampling
+        df = df.with_row_index("_row_idx").sort("_row_idx")
+        
+        # Use deterministic sampling on the materialized DataFrame
+        max_n = min(max_rows, self.settings.max_plot_points, len(df))
+        df = df.sample(n=max_n, seed=seed, with_replacement=False)
+        
+        return df.drop("_row_idx")
 
     def _check_materialization_size(self, lf: pl.LazyFrame, columns: list[str]) -> None:
         """Estimate materialization size before collecting."""
