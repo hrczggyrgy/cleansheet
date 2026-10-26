@@ -1,0 +1,99 @@
+[project]
+name = "CleanSheet"
+version = "0.1.0"
+description = "No-code statistical analysis with Streamlit, Polars 2.0, and seaborn"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit==1.66.0",
+    "polars[rtcompat]==2.0.0",
+    "pyarrow>=19.0.0",
+    "seaborn[stats]==0.13.2",
+    "scipy>=1.13.0",
+    "statsmodels>=0.14.2",
+    "matplotlib>=3.9.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+    "pre-commit>=3.7.0",
+]
+deploy = [
+    "uv>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+select = ["E", "F", "I", "UP", "W", "C90", "PL", "RUF", "T20", "PTH", "ERA", "PD", "PGH", "PYI", "Q", "RET", "SIM", "TID", "TRY", "ARG", "NPY", "PERF", "PIE", "PLE", "PLR", "PT", "RSE", "S", "TCH", "YTT"]
+ignore = ["S101", "S113", "PLR2004", "T201", "T203"]
+extend-select = ["D"]
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_optional = true
+show_error_codes = true
+pretty = true
+namespace_packages = true
+explicit_package_bases = true
+enable_error_code = ["ignore-without-action"]
+
+[[tool.mypy.overrides]]
+module = ["streamlit*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["polars*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "unit: Unit tests",
+    "statistical: Statistical reference tests",
+    "integration: Integration tests",
+    "ui: UI tests",
+    "security: Security tests",
+    "performance: Performance tests",
+    "slow: Slow tests",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["CleanSheet*"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.2.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+    "pre-commit>=3.7.0",
+]
