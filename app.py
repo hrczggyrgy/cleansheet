@@ -81,11 +81,13 @@ def render_sidebar() -> None:
     """Render sidebar with session info and navigation."""
     with st.sidebar:
         st.markdown("### CleanSheet")
-        st.caption(f"Session: `{st.session_state.session_id[:8]}`")
+        session_id = st.session_state.get("session_id", "")
+        st.caption(f"Session: `{session_id[:8]}`")
 
         # Current dataset
-        if st.session_state.dataset_ref:
-            ref = st.session_state.dataset_ref
+        dataset_ref = st.session_state.get("dataset_ref")
+        if dataset_ref:
+            ref = dataset_ref
             st.markdown("**Dataset**")
             st.caption(f"{ref.row_count:,} rows × {ref.column_count} cols")
             st.caption(f"Hash: `{ref.source_sha256[:12]}`")
@@ -100,7 +102,8 @@ def render_sidebar() -> None:
             JobStatus.COMPLETE.value,
             JobStatus.EXPORT_READY.value,
         ]
-        current_idx = stages.index(st.session_state.current_stage) if st.session_state.current_stage in stages else 0
+        current_stage = st.session_state.get("current_stage", JobStatus.EMPTY.value)
+        current_idx = stages.index(current_stage) if current_stage in stages else 0
 
         st.markdown("**Progress**")
         for i, stage in enumerate(stages):
@@ -115,7 +118,7 @@ def render_sidebar() -> None:
             reset_session()
             st.rerun()
 
-        if st.session_state.current_stage in [JobStatus.COMPLETE.value, JobStatus.EXPORT_READY.value]:
+        if current_stage in [JobStatus.COMPLETE.value, JobStatus.EXPORT_READY.value]:
             if st.button("📥 Export Results", use_container_width=True, type="primary"):
                 st.session_state.current_stage = JobStatus.EXPORT_READY.value
                 st.rerun()
