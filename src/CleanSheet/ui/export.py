@@ -29,7 +29,7 @@ def render_export(ws: Workspace) -> None:
     st.caption("Download a complete, reproducible analysis bundle.")
 
     # Export options
-    with st.form("export_options"):
+    with st.form("export_options_form"):
         st.markdown("### Report Contents")
 
         col1, col2 = st.columns(2)
@@ -43,11 +43,12 @@ def render_export(ws: Workspace) -> None:
             st.checkbox("Run Manifest", value=True, disabled=True)
 
         st.markdown("### Figures")
-        include_figures = st.checkbox("Include Plot PNGs", value=True)
+        include_figures = st.checkbox("Include Plot PNGs", value=True, key="export_include_figures")
 
         st.markdown("### Data")
         include_data = st.checkbox("Include Prepared Data (CSV)", value=False,
-                                   help="Warning: Includes potentially sensitive data")
+                                   help="Warning: Includes potentially sensitive data",
+                                   key="export_include_data")
 
         st.markdown("### Format")
         st.radio("Bundle format", ["ZIP (all files)"], disabled=True)
@@ -55,7 +56,7 @@ def render_export(ws: Workspace) -> None:
         submitted = st.form_submit_button("Generate Export", type="primary", use_container_width=True)
 
         if submitted:
-            st.session_state.export_options = {
+            st.session_state._export_config = {
                 "include_data": include_data,
                 "include_figures": include_figures,
             }
@@ -64,9 +65,10 @@ def render_export(ws: Workspace) -> None:
     # Generate export outside the form
     if st.session_state.get("generate_export"):
         plots = st.session_state.get("plots", [])
+        config = st.session_state.get("_export_config", {})
         _generate_export(
             ws, dataset_ref, import_spec, column_roles, recipe,
-            results, st.session_state.export_options["include_data"], st.session_state.export_options["include_figures"],
+            results, config.get("include_data", False), config.get("include_figures", True),
             plots
         )
         st.session_state.generate_export = False
