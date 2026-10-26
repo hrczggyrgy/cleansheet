@@ -15,7 +15,8 @@ from CleanSheet.contracts import (
     SemanticRole,
     StudyDesign,
 )
-from CleanSheet.engine.execution import LazyExecutor
+from CleanSheet.config import get_settings
+from CleanSheet.engine.execution import LazyExecutor, get_prepared_lazy
 from CleanSheet.jobs.workspace import Workspace
 
 
