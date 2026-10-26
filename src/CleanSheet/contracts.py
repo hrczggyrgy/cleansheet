@@ -247,10 +247,8 @@ class AnalysisRequest(BaseModel):
     @field_validator("variables")
     @classmethod
     def _validate_variables(cls, v: dict[str, str]) -> dict[str, str]:
-        required = {"outcome", "group"}  # minimal set; goal-specific validation in service
-        missing = required - set(v.keys())
-        if missing:
-            raise ValueError(f"Missing required variable roles: {missing}")
+        if not v:
+            raise ValueError("At least one variable must be specified")
         return v
 
 
@@ -278,7 +276,7 @@ class StatisticalResult(BaseModel):
     estimate: float | None = None
     interval: tuple[float, float] | None = None
     interval_method: IntervalMethod = IntervalMethod.NOT_COMPUTED
-    interval_status: Literal["computed", "not_computed", "blocked", "failed"] = "not_computed"
+    interval_status: Literal["computed", "not_computed", "blocked", "failed", "not_applicable"] = "not_computed"
     statistic: float | None = None
     degrees_of_freedom: float | int | None = None
     p_value: float | None = None

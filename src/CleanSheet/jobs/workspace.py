@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import tempfile
@@ -87,14 +88,25 @@ class Workspace:
         # Read schema from source
         if fmt == "csv":
             import io
-            lf = pl.scan_csv(io.BytesIO(data), **import_spec.model_dump(exclude={"schema_overrides"}))
+            # Extract only valid scan_csv arguments from ImportSpec
+            csv_args = {
+                "separator": import_spec.delimiter,
+                "encoding": import_spec.encoding,
+                "decimal_comma": import_spec.decimal_comma,
+                "null_values": import_spec.null_tokens,
+                "infer_schema_length": import_spec.infer_schema_length,
+                "try_parse_dates": False,
+            }
+            lf = pl.scan_csv(io.BytesIO(data), **csv_args)
         else:
             import io
             lf = pl.scan_parquet(io.BytesIO(data))
 
         schema = lf.collect_schema()
+        # Convert Polars dtypes to strings for JSON serialization
+        schema_serializable = {k: str(v) for k, v in schema.items()}
         schema_hash = hashlib.sha256(
-            json.dumps(sorted(schema.items())).encode()
+            json.dumps(sorted(schema_serializable.items())).encode()
         ).hexdigest()[:16]
 
         # Get dimensions

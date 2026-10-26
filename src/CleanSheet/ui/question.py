@@ -113,7 +113,7 @@ def render_question(ws: Workspace) -> None:
     if "selected_goal" in st.session_state:
         goal = st.session_state.selected_goal
         st.divider()
-        _render_goal_config(ws, goal, df, role_map, continuous_cols, categorical_cols, ordinal_cols, date_cols, id_cols)
+        _render_goal_config(ws, goal, df, role_map, continuous_cols, categorical_cols, ordinal_cols, date_cols, id_cols, dataset_ref)
 
     # Back button
     if st.button("← Back to Preparation"):
@@ -133,6 +133,7 @@ def _render_goal_config(
     ordinal_cols: list,
     date_cols: list,
     id_cols: list,
+    dataset_ref,
 ) -> None:
     """Render configuration for selected goal."""
     st.markdown(f"### Configure: {goal.value.replace('_', ' ').title()}")
@@ -225,7 +226,7 @@ def _render_goal_config(
             seed = st.number_input("Random seed", 0, 2**31 - 1, 42)
 
         # Submit
-        submitted = st.form_submit_button("Check Eligibility & Run Analysis", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Check Eligibility", type="primary", use_container_width=True)
 
         if submitted:
             # Validate group levels
@@ -233,8 +234,11 @@ def _render_goal_config(
                 st.error("Please select exactly two groups")
                 return
 
+            # For paired means, get pair_id and occasion from variables
+            _pair_id = variables.get("pair_id")
+            _occasion = variables.get("occasion")
             if goal == Goal.COMPARE_PAIRED_MEANS:
-                if not pair_id or not occasion:
+                if not _pair_id or not _occasion:
                     st.error("Please provide pair identifier and occasion")
                     return
 
@@ -256,7 +260,10 @@ def _render_goal_config(
 
             # Check eligibility
             with st.spinner("Checking eligibility..."):
-                eligibility = check_eligibility(ws, dataset_ref, request)
+                recipe = st.session_state.get("recipe", [])
+                recipe_steps = [s.model_dump() for s in recipe]
+                column_roles = st.session_state.get("column_roles", [])
+                eligibility = check_eligibility(ws, dataset_ref, request, column_roles, recipe_steps)
 
             if not eligibility.allowed:
                 st.error("**Analysis not eligible:**")
@@ -273,11 +280,16 @@ def _render_goal_config(
                 for w in eligibility.warnings:
                     st.warning(w)
 
-            # Confirm and run
-            if st.button("Run Analysis", type="primary", use_container_width=True):
-                st.session_state.analysis_plan = request
-                st.session_state.current_stage = JobStatus.RUNNING
-                st.rerun()
+            # Store request for confirmation
+            st.session_state.pending_analysis_request = request
+
+    # Confirmation button OUTSIDE the form
+    if "pending_analysis_request" in st.session_state:
+        if st.button("Run Analysis", type="primary", use_container_width=True):
+            st.session_state.analysis_plan = st.session_state.pending_analysis_request
+            del st.session_state.pending_analysis_request
+            st.session_state.current_stage = JobStatus.RUNNING
+            st.rerun()
 
 
 def _get_estimand_description(goal: Goal, variables: dict) -> str:

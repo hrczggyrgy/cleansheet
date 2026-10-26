@@ -22,7 +22,7 @@ def init_session() -> None:
     if "session_id" not in st.session_state:
         st.session_state.session_id = uuid.uuid4().hex[:12]
         st.session_state.workspace_id = None
-        st.session_state.current_stage = "EMPTY"
+        st.session_state.current_stage = JobStatus.EMPTY.value
         st.session_state.dataset_ref = None
         st.session_state.import_spec = None
         st.session_state.column_roles = []
@@ -62,7 +62,7 @@ def reset_session() -> None:
     st.session_state.clear()
     st.session_state.session_id = session_id
     st.session_state.workspace_id = None
-    st.session_state.current_stage = "EMPTY"
+    st.session_state.current_stage = JobStatus.EMPTY.value
     st.session_state.dataset_ref = None
     st.session_state.import_spec = None
     st.session_state.column_roles = []
@@ -90,7 +90,15 @@ def render_sidebar() -> None:
             st.caption(f"Hash: `{ref.source_sha256[:12]}`")
 
         # Progress indicator
-        stages = ["EMPTY", "IMPORT_REVIEW", "DATA_READY", "PLAN_READY", "RUNNING", "COMPLETE", "EXPORT_READY"]
+        stages = [
+            JobStatus.EMPTY.value,
+            JobStatus.IMPORT_REVIEW.value,
+            JobStatus.DATA_READY.value,
+            JobStatus.PLAN_READY.value,
+            JobStatus.RUNNING.value,
+            JobStatus.COMPLETE.value,
+            JobStatus.EXPORT_READY.value,
+        ]
         current_idx = stages.index(st.session_state.current_stage) if st.session_state.current_stage in stages else 0
 
         st.markdown("**Progress**")
@@ -106,9 +114,9 @@ def render_sidebar() -> None:
             reset_session()
             st.rerun()
 
-        if st.session_state.current_stage in ["COMPLETE", "EXPORT_READY"]:
+        if st.session_state.current_stage in [JobStatus.COMPLETE.value, JobStatus.EXPORT_READY.value]:
             if st.button("📥 Export Results", use_container_width=True, type="primary"):
-                st.session_state.current_stage = "EXPORT_READY"
+                st.session_state.current_stage = JobStatus.EXPORT_READY.value
                 st.rerun()
 
         # Demo mode indicator
@@ -133,17 +141,17 @@ def main() -> None:
     # Route to appropriate stage
     stage = st.session_state.current_stage
 
-    if stage == "EMPTY":
+    if stage == JobStatus.EMPTY.value:
         render_start(ws)
-    elif stage == "IMPORT_REVIEW":
+    elif stage == JobStatus.IMPORT_REVIEW.value:
         render_import_review(ws)
-    elif stage == "DATA_READY":
+    elif stage == JobStatus.DATA_READY.value:
         render_preparation(ws)
-    elif stage == "PLAN_READY":
+    elif stage == JobStatus.PLAN_READY.value:
         render_question(ws)
-    elif stage in ["RUNNING", "COMPLETE", "PARTIAL"]:
+    elif stage in [JobStatus.RUNNING.value, JobStatus.COMPLETE.value, JobStatus.PARTIAL.value]:
         render_results(ws)
-    elif stage == "EXPORT_READY":
+    elif stage == JobStatus.EXPORT_READY.value:
         render_export(ws)
     else:
         st.error(f"Unknown stage: {stage}")

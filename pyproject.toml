@@ -18,6 +18,9 @@ dependencies = [
     "pandas>=2.2.0",
 ]
 
+[project.scripts]
+cleansheet = "CleanSheet.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2.0",

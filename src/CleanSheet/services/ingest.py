@@ -103,16 +103,18 @@ def parse_csv_preview(
         # Use BytesIO for parsing
         bio = io.BytesIO(data)
 
+        # Extract only valid scan_csv arguments from ImportSpec
+        csv_args = {
+            "separator": spec.delimiter,
+            "encoding": spec.encoding,
+            "decimal_comma": spec.decimal_comma,
+            "null_values": spec.null_tokens,
+            "infer_schema_length": spec.infer_schema_length,
+            "try_parse_dates": False,
+        }
+
         # Parse with Polars
-        lf = pl.scan_csv(
-            bio,
-            separator=spec.delimiter,
-            encoding=spec.encoding,
-            decimal_comma=spec.decimal_comma,
-            null_values=spec.null_tokens,
-            infer_schema_length=spec.infer_schema_length,
-            try_parse_dates=False,
-        )
+        lf = pl.scan_csv(bio, **csv_args)
 
         # Collect preview
         preview = lf.limit(preview_rows).collect()

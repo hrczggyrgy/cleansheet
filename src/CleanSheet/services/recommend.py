@@ -324,25 +324,35 @@ def check_eligibility(
     workspace: Workspace,
     dataset_ref: DatasetRef,
     request: AnalysisRequest,
+    column_roles: list | None = None,
+    recipe_steps: list[dict[str, Any]] | None = None,
 ) -> EligibilityResult:
     """Check if an analysis is eligible for the given data."""
     # Get prepared data
-    executor = LazyExecutor(workspace, dataset_ref)
-    df = executor.materialize_for_profiling(list(request.variables.values()))
+    if recipe_steps is not None:
+        lf = get_prepared_lazy(workspace, dataset_ref, recipe_steps)
+        df = lf.collect(engine="streaming" if get_settings().polars_streaming else "in-memory")
+    else:
+        executor = LazyExecutor(workspace, dataset_ref)
+        df = executor.materialize_for_profiling(list(request.variables.values()))
 
-    # Get column roles
+    # Get column roles - use confirmed roles if provided, otherwise infer
     roles = {}
-    for col in df.columns:
-        # Infer from dtype
-        s = df[col]
-        if s.dtype.is_numeric():
-            roles[col] = SemanticRole.CONTINUOUS
-        elif s.dtype in (pl.Date, pl.Datetime):
-            roles[col] = SemanticRole.DATE
-        elif s.dtype == pl.Boolean or (s.n_unique() / len(s) < 0.05 and s.n_unique() <= 20):
-            roles[col] = SemanticRole.CATEGORICAL
-        else:
-            roles[col] = SemanticRole.FREE_TEXT
+    if column_roles:
+        for cr in column_roles:
+            roles[cr.column] = cr.semantic_role
+    else:
+        for col in df.columns:
+            # Infer from dtype
+            s = df[col]
+            if s.dtype.is_numeric():
+                roles[col] = SemanticRole.CONTINUOUS
+            elif s.dtype in (pl.Date, pl.Datetime):
+                roles[col] = SemanticRole.DATE
+            elif s.dtype == pl.Boolean or (s.n_unique() / len(s) < 0.05 and s.n_unique() <= 20):
+                roles[col] = SemanticRole.CATEGORICAL
+            else:
+                roles[col] = SemanticRole.FREE_TEXT
 
     # Run gates for the goal
     gates = ELIGIBILITY_GATES.get(request.goal, [])
@@ -364,6 +374,11 @@ def check_eligibility(
                 reasons.append(gate.description)
             else:
                 warnings.append(gate.description)
+
+    # For UNKNOWN study design, block inference (except descriptive)
+    if request.study_design == StudyDesign.UNKNOWN and request.goal != Goal.DESCRIBE_DATA:
+        allowed = False
+        reasons.append("Study design is unknown; only descriptive analysis is allowed")
 
     # Determine suggested method
     suggested_method = _suggest_method(request.goal)

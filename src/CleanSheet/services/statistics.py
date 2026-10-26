@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +14,7 @@ from statsmodels.stats.multitest import multipletests
 from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
+    AnalysisResult,
     IntervalMethod,
     Method,
     StatisticalResult,
@@ -41,6 +43,7 @@ class WelchTTestAdapter(TestAdapter):
         group_col = request.variables["group"]
         outcome_col = request.variables["outcome"]
         levels = request.group_levels
+        contrast = request.contrast
 
         if not levels or len(levels) != 2:
             raise EligibilityError("Welch t-test requires exactly two group levels")
@@ -52,23 +55,31 @@ class WelchTTestAdapter(TestAdapter):
             ~pl.col(outcome_col).is_nan()
         )
 
-        group1 = data.filter(pl.col(group_col) == levels[0])[outcome_col].to_numpy()
-        group2 = data.filter(pl.col(group_col) == levels[1])[outcome_col].to_numpy()
+        # Determine contrast order
+        if contrast and contrast.endswith(f"_minus_{levels[1]}") and contrast.startswith(f"{levels[0]}_"):
+            first, second = levels[0], levels[1]
+        elif contrast and contrast.endswith(f"_minus_{levels[0]}") and contrast.startswith(f"{levels[1]}_"):
+            first, second = levels[1], levels[0]
+        else:
+            first, second = levels[0], levels[1]
 
-        if len(group1) < 2 or len(group2) < 2:
+        group_first = data.filter(pl.col(group_col) == first)[outcome_col].to_numpy()
+        group_second = data.filter(pl.col(group_col) == second)[outcome_col].to_numpy()
+
+        if len(group_first) < 2 or len(group_second) < 2:
             raise EligibilityError("Each group must have at least 2 observations")
 
         result = stats.ttest_ind(
-            group1, group2,
+            group_first, group_second,
             equal_var=False,
             alternative=request.alternative.value,
         )
 
-        mean_diff = np.mean(group1) - np.mean(group2)
-        se = np.sqrt(np.var(group1, ddof=1)/len(group1) + np.var(group2, ddof=1)/len(group2))
-        df_welch = (np.var(group1, ddof=1)/len(group1) + np.var(group2, ddof=1)/len(group2))**2 / (
-            (np.var(group1, ddof=1)/len(group1))**2/(len(group1)-1) +
-            (np.var(group2, ddof=1)/len(group2))**2/(len(group2)-1)
+        mean_diff = np.mean(group_first) - np.mean(group_second)
+        se = np.sqrt(np.var(group_first, ddof=1)/len(group_first) + np.var(group_second, ddof=1)/len(group_second))
+        df_welch = (np.var(group_first, ddof=1)/len(group_first) + np.var(group_second, ddof=1)/len(group_second))**2 / (
+            (np.var(group_first, ddof=1)/len(group_first))**2/(len(group_first)-1) +
+            (np.var(group_second, ddof=1)/len(group_second))**2/(len(group_second)-1)
         )
 
         from scipy.stats import t
@@ -77,12 +88,12 @@ class WelchTTestAdapter(TestAdapter):
         ci_low = mean_diff - t_crit * se
         ci_high = mean_diff + t_crit * se
 
-        pooled_sd = np.sqrt(((len(group1)-1)*np.var(group1, ddof=1) + (len(group2)-1)*np.var(group2, ddof=1)) / (len(group1) + len(group2) - 2))
+        pooled_sd = np.sqrt(((len(group_first)-1)*np.var(group_first, ddof=1) + (len(group_second)-1)*np.var(group_second, ddof=1)) / (len(group_first) + len(group_second) - 2))
         cohen_d = mean_diff / pooled_sd if pooled_sd > 0 else 0
 
         return StatisticalResult(
             method=Method.WELCH_T,
-            group_counts={levels[0]: len(group1), levels[1]: len(group2)},
+            group_counts={first: len(group_first), second: len(group_second)},
             estimate=float(mean_diff),
             interval=(float(ci_low), float(ci_high)),
             interval_method=IntervalMethod.PARAMETRIC,
@@ -110,6 +121,7 @@ class PairedTTestAdapter(TestAdapter):
         pair_col = request.variables["pair_id"]
         outcome_col = request.variables["outcome"]
         occasion_col = request.variables["occasion"]
+        contrast = request.contrast
 
         wide = df.pivot(
             values=outcome_col,
@@ -124,15 +136,23 @@ class PairedTTestAdapter(TestAdapter):
         if len(occasion_cols) != 2:
             raise EligibilityError("Paired test requires exactly two occasions")
 
-        before = wide[occasion_cols[0]].to_numpy()
-        after = wide[occasion_cols[1]].to_numpy()
+        # Determine contrast order
+        if contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
+            first, second = occasion_cols[0], occasion_cols[1]
+        elif contrast and contrast.endswith(f"_minus_{occasion_cols[0]}") and contrast.startswith(f"{occasion_cols[1]}_"):
+            first, second = occasion_cols[1], occasion_cols[0]
+        else:
+            first, second = occasion_cols[0], occasion_cols[1]
 
-        if len(before) < 2:
+        vals_first = wide[first].to_numpy()
+        vals_second = wide[second].to_numpy()
+
+        if len(vals_first) < 2:
             raise EligibilityError("Need at least 2 complete pairs")
 
-        diff = before - after if request.contrast == "before_minus_after" else after - before
+        diff = vals_first - vals_second
 
-        result = stats.ttest_rel(before, after, alternative=request.alternative.value)
+        result = stats.ttest_rel(vals_first, vals_second, alternative=request.alternative.value)
 
         mean_diff = np.mean(diff)
         se = np.std(diff, ddof=1) / np.sqrt(len(diff))
@@ -148,7 +168,7 @@ class PairedTTestAdapter(TestAdapter):
 
         return StatisticalResult(
             method=Method.PAIRED_T,
-            group_counts={"pairs": len(diff)},
+            group_counts={f"{first}": len(vals_first), f"{second}": len(vals_second)},
             estimate=float(mean_diff),
             interval=(float(ci_low), float(ci_high)),
             interval_method=IntervalMethod.PARAMETRIC,
@@ -161,6 +181,7 @@ class PairedTTestAdapter(TestAdapter):
             assumption_checks={
                 "normality_differences": _check_normality(diff),
                 "n_pairs": len(diff),
+                "contrast": f"{first} minus {second}",
             },
         )
 
@@ -282,6 +303,7 @@ class SpearmanCorrelationAdapter(TestAdapter):
                     confidence_level=request.confidence_level,
                     n_resamples=min(get_settings().bootstrap_resamples, 2000),
                     method="percentile",
+                    paired=True,
                     rng=np.random.default_rng(request.seed),
                 )
                 ci_low, ci_high = float(ci.confidence_interval.low), float(ci.confidence_interval.high)
@@ -455,11 +477,16 @@ def run_analysis(
     workspace: Workspace,
     dataset_ref: Any,
     request: AnalysisRequest,
-) -> StatisticalResult:
-    executor = LazyExecutor(workspace, dataset_ref)
-
-    required_cols = list(set(request.variables.values()))
-    df = executor.materialize_for_analysis(required_cols)
+    recipe_steps: list[dict[str, Any]] | None = None,
+) -> AnalysisResult:
+    if recipe_steps is not None:
+        lf = get_prepared_lazy(workspace, dataset_ref, recipe_steps)
+        required_cols = list(set(request.variables.values()))
+        df = lf.select(required_cols).collect(engine="streaming" if get_settings().polars_streaming else "in-memory")
+    else:
+        executor = LazyExecutor(workspace, dataset_ref)
+        required_cols = list(set(request.variables.values()))
+        df = executor.materialize_for_analysis(required_cols)
 
     method = request.method or _select_method(request.goal)
     adapter = ADAPTERS.get(method)
@@ -467,12 +494,23 @@ def run_analysis(
     if adapter is None:
         raise EligibilityError(f"No adapter for method: {method}")
 
-    result = adapter.run(df, request)
+    stat_result = adapter.run(df, request)
 
+    # Apply multiplicity correction if needed
     if request.multiplicity.get("method") != "none" and request.multiplicity.get("family_size", 1) > 1:
         pass
 
-    return result
+    # Wrap in AnalysisResult
+    return AnalysisResult(
+        run_id=hashlib.sha256(str(request.model_dump()).encode()).hexdigest()[:12],
+        status="complete",
+        request=request,
+        statistical_results=[stat_result],
+        plots=[],
+        warnings=[],
+        provenance={},
+        artifact_refs={},
+    )
 
 
 def _select_method(goal: str) -> Method:

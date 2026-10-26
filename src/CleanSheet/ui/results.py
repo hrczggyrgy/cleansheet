@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from CleanSheet.contracts import IntervalMethod, JobStatus, StatisticalResult
+from CleanSheet.contracts import IntervalMethod, JobStatus
 from CleanSheet.engine.execution import LazyExecutor, get_or_create_prepared
 from CleanSheet.jobs.workspace import Workspace
 from CleanSheet.services.statistics import run_analysis
@@ -25,23 +25,25 @@ def render_results(ws: Workspace) -> None:
     if dataset_ref is None or analysis_plan is None:
         st.error("No analysis to display.")
         if st.button("← Back"):
-            st.session_state.current_stage = JobStatus.PLAN_READY
+            st.session_state.current_stage = JobStatus.PLAN_READY.value
             st.rerun()
         return
 
     st.title("📈 Results")
 
     # Run analysis if not done
-    if results is None and st.session_state.current_stage == JobStatus.RUNNING:
+    if results is None and st.session_state.current_stage == JobStatus.RUNNING.value:
         with st.spinner("Running analysis..."):
             try:
-                result = run_analysis(ws, dataset_ref, analysis_plan)
+                recipe = st.session_state.get("recipe", [])
+                recipe_steps = [s.model_dump() for s in recipe]
+                result = run_analysis(ws, dataset_ref, analysis_plan, recipe_steps)
                 st.session_state.results = result
-                st.session_state.current_stage = JobStatus.COMPLETE
+                st.session_state.current_stage = JobStatus.COMPLETE.value
                 st.rerun()
             except Exception as e:
                 st.error(f"Analysis failed: {e}")
-                st.session_state.current_stage = JobStatus.FAILED
+                st.session_state.current_stage = JobStatus.FAILED.value
                 return
 
     results = st.session_state.results
@@ -67,7 +69,7 @@ def render_results(ws: Workspace) -> None:
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("← New Question", use_container_width=True):
-            st.session_state.current_stage = JobStatus.PLAN_READY
+            st.session_state.current_stage = JobStatus.PLAN_READY.value
             st.session_state.results = None
             st.session_state.plots = []
             if "analysis_plan" in st.session_state:
@@ -76,17 +78,17 @@ def render_results(ws: Workspace) -> None:
 
     with col2:
         if st.button("🔄 Re-run", use_container_width=True):
-            st.session_state.current_stage = JobStatus.RUNNING
+            st.session_state.current_stage = JobStatus.RUNNING.value
             st.session_state.results = None
             st.rerun()
 
     with col3:
         if st.button("Continue to Export →", type="primary", use_container_width=True):
-            st.session_state.current_stage = JobStatus.EXPORT_READY
+            st.session_state.current_stage = JobStatus.EXPORT_READY.value
             st.rerun()
 
 
-def _render_statistical_result(result: StatisticalResult, plan: AnalysisRequest, index: int) -> None:
+def _render_statistical_result(result, plan, index: int) -> None:
     """Render a single statistical result."""
     st.markdown(f"### Analysis {index + 1}: {result.method.value.replace('_', ' ').title()}")
 
@@ -147,7 +149,7 @@ def _generate_result_plots(
     ws: Workspace,
     dataset_ref,
     recipe: list,
-    plan: AnalysisRequest,
+    plan,
     results,
 ) -> None:
     """Generate plots for the analysis results."""

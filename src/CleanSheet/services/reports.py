@@ -350,6 +350,7 @@ def generate_export_bundle(
     recipe: list[Any],
     profile: Any,
     include_data: bool = False,
+    plots: list[Any] | None = None,
 ) -> Path:
     """Generate a complete export bundle as a ZIP file."""
     settings = get_settings()
@@ -368,6 +369,9 @@ def generate_export_bundle(
     recipe_json = generate_recipe_json(result)
     manifest_json = manifest.to_json()
 
+    # Use provided plots or generate placeholder specs
+    plot_data = plots if plots is not None else []
+
     # Create ZIP in memory
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -381,10 +385,15 @@ def generate_export_bundle(
         zf.writestr("run_manifest.json", manifest_json)
 
         # Figures
-        for i, plot in enumerate(result.plots):
+        for i, plot in enumerate(plot_data):
             ext = "png"
-            filename = f"figures/plot_{i+1}_{plot.spec.plot_type.value}.{ext}"
-            zf.writestr(filename, plot.png_bytes)
+            if hasattr(plot, "spec"):
+                plot_type = plot.spec.plot_type.value
+            else:
+                plot_type = "plot"
+            filename = f"figures/plot_{i+1}_{plot_type}.{ext}"
+            if hasattr(plot, "png_bytes"):
+                zf.writestr(filename, plot.png_bytes)
 
         # Prepared data (optional)
         if include_data and recipe:

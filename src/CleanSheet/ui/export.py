@@ -21,7 +21,7 @@ def render_export(ws: Workspace) -> None:
     if dataset_ref is None or results is None:
         st.error("No analysis to export.")
         if st.button("← Back"):
-            st.session_state.current_stage = JobStatus.COMPLETE
+            st.session_state.current_stage = JobStatus.COMPLETE.value
             st.rerun()
         return
 
@@ -34,13 +34,13 @@ def render_export(ws: Workspace) -> None:
 
         col1, col2 = st.columns(2)
         with col1:
-            include_report = st.checkbox("Markdown/HTML Report", value=True)
-            include_results = st.checkbox("Results CSV", value=True)
-            include_dict = st.checkbox("Data Dictionary", value=True)
+            st.checkbox("Markdown/HTML Report", value=True, disabled=True)
+            st.checkbox("Results CSV", value=True, disabled=True)
+            st.checkbox("Data Dictionary", value=True, disabled=True)
         with col2:
-            include_quality = st.checkbox("Quality Issues", value=True)
-            include_recipe = st.checkbox("Recipe JSON", value=True)
-            include_manifest = st.checkbox("Run Manifest", value=True)
+            st.checkbox("Quality Issues", value=True, disabled=True)
+            st.checkbox("Recipe JSON", value=True, disabled=True)
+            st.checkbox("Run Manifest", value=True, disabled=True)
 
         st.markdown("### Figures")
         include_figures = st.checkbox("Include Plot PNGs", value=True)
@@ -50,24 +50,35 @@ def render_export(ws: Workspace) -> None:
                                    help="Warning: Includes potentially sensitive data")
 
         st.markdown("### Format")
-        export_format = st.radio("Bundle format", ["ZIP (all files)", "Individual files"])
+        st.radio("Bundle format", ["ZIP (all files)"], disabled=True)
 
         submitted = st.form_submit_button("Generate Export", type="primary", use_container_width=True)
 
         if submitted:
-            _generate_export(
-                ws, dataset_ref, import_spec, column_roles, recipe,
-                results, include_data, include_figures
-            )
+            st.session_state.export_options = {
+                "include_data": include_data,
+                "include_figures": include_figures,
+            }
+            st.session_state.generate_export = True
+
+    # Generate export outside the form
+    if st.session_state.get("generate_export"):
+        plots = st.session_state.get("plots", [])
+        _generate_export(
+            ws, dataset_ref, import_spec, column_roles, recipe,
+            results, st.session_state.export_options["include_data"], st.session_state.export_options["include_figures"],
+            plots
+        )
+        st.session_state.generate_export = False
 
     # Back button
     if st.button("← Back to Results"):
-        st.session_state.current_stage = JobStatus.COMPLETE
+        st.session_state.current_stage = JobStatus.COMPLETE.value
         st.rerun()
 
 
 def _generate_export(
-    ws: Workspace,
+    workspace: Workspace,
     dataset_ref,
     import_spec,
     column_roles,
@@ -75,16 +86,17 @@ def _generate_export(
     results,
     include_data: bool,
     include_figures: bool,
+    plots: list,
 ) -> None:
     """Generate the export bundle."""
     with st.spinner("Generating export bundle..."):
         try:
             # Run profiling for data dictionary
-            profile = run_profiling(ws, dataset_ref)
+            profile = run_profiling(workspace, dataset_ref)
 
             # Generate bundle
             export_path = generate_export_bundle(
-                ws=ws,
+                workspace=workspace,
                 result=results,
                 dataset_ref=dataset_ref,
                 import_spec=import_spec,
@@ -92,6 +104,7 @@ def _generate_export(
                 recipe=recipe,
                 profile=profile,
                 include_data=include_data,
+                plots=plots,
             )
 
             # Read the zip file

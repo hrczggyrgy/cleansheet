@@ -255,3 +255,15 @@ def get_or_create_prepared(
     workspace.store_prepared(df, recipe_hash)
 
     return df
+
+
+def get_prepared_lazy(
+    workspace: Workspace,
+    dataset_ref: DatasetRef,
+    recipe_steps: list[dict[str, Any]],
+) -> pl.LazyFrame:
+    """Get prepared lazy frame for analysis."""
+    executor = LazyExecutor(workspace, dataset_ref)
+    lf = executor.source_lf
+    lf = build_preparation_pipeline(lf, recipe_steps)
+    return lf
