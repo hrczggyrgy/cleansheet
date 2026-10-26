@@ -131,8 +131,8 @@ def profile_column(s: pl.Series, semantic_role: str) -> ColumnProfile:
         prof.kurtosis = float(s.kurtosis()) if n_rows > n_null + 3 else None
 
         if s.dtype.is_float():
-            prof.n_nan = int(s.filter(pl.col(name).is_nan()).height)
-            prof.n_infinite = int(s.filter(pl.col(name).is_infinite()).height)
+            prof.n_nan = int(s.is_nan().sum())
+            prof.n_infinite = int(s.is_infinite().sum())
 
     # Categorical profiling
     if s.dtype in (pl.String, pl.Categorical) or semantic_role in ("categorical", "identifier"):
