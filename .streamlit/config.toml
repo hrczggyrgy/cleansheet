@@ -1,6 +1,3 @@
-"""Streamlit app configuration."""
-
-theme = """
 [theme]
 primaryColor = "#2E86C1"
 backgroundColor = "#FFFFFF"
@@ -22,28 +19,3 @@ gatherUsageStats = false
 magicEnabled = false
 installTracer = false
 fixMatplotlib = true
-"""
-
-streamlit_config = """
-[theme]
-primaryColor = "#2E86C1"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8F9FA"
-textColor = "#1A1A2E"
-font = "sans serif"
-
-[server]
-headless = true
-port = 8501
-address = "localhost"
-enableCORS = false
-enableXsrfProtection = true
-
-[browser]
-gatherUsageStats = false
-
-[runner]
-magicEnabled = false
-installTracer = false
-fixMatplotlib = true
-"""

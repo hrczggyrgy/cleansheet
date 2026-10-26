@@ -6,6 +6,7 @@ import uuid
 import streamlit as st
 
 from CleanSheet.config import get_settings
+from CleanSheet.contracts import JobStatus
 from CleanSheet.jobs.workspace import get_workspace_manager, Workspace
 from CleanSheet.ui.start import render_start
 from CleanSheet.ui.import_review import render_import_review
