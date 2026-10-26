@@ -143,7 +143,7 @@ def main() -> None:
     render_sidebar()
 
     # Route to appropriate stage
-    stage = st.session_state.current_stage
+    stage = st.session_state.get("current_stage", JobStatus.EMPTY.value)
 
     if stage == JobStatus.EMPTY.value:
         render_start(ws)
