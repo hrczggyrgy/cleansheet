@@ -331,7 +331,7 @@ def validate_data_quality(df: pl.DataFrame) -> dict[str, Any]:
         if s.dtype.is_numeric():
             # Check for NaN
             if s.dtype.is_float():
-                nan_count = s.filter(pl.col(col).is_nan()).height
+                nan_count = int(s.is_nan().sum())
                 if nan_count > 0:
                     issues["numeric_issues"].append({
                         "column": col,
@@ -340,7 +340,7 @@ def validate_data_quality(df: pl.DataFrame) -> dict[str, Any]:
                     })
 
                 # Check for infinity
-                inf_count = s.filter(pl.col(col).is_infinite()).height
+                inf_count = int(s.is_infinite().sum())
                 if inf_count > 0:
                     issues["numeric_issues"].append({
                         "column": col,
