@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import streamlit as st
 
 from CleanSheet.contracts import (
@@ -117,6 +119,39 @@ def _invalidate_pending_analysis() -> None:
         st.session_state.plots = []
 
 
+def _compute_config_hash(goal, variables, group_levels, contrast, study_design, confidence, alternative, missing_policy, nonfinite_policy, seed) -> str:
+    """Compute a hash of the analysis configuration for change detection."""
+    import hashlib
+    import json
+    config = {
+        "goal": goal.value if goal else None,
+        "variables": variables,
+        "group_levels": group_levels,
+        "contrast": contrast,
+        "study_design": study_design.value if study_design else None,
+        "confidence": confidence,
+        "alternative": alternative,
+        "missing_policy": missing_policy,
+        "nonfinite_policy": nonfinite_policy,
+        "seed": seed,
+    }
+    return hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _check_and_invalidate_config(goal, variables, group_levels, contrast, study_design, confidence, alternative, missing_policy, nonfinite_policy, seed) -> None:
+    """Check if configuration changed and invalidate pending analysis if so."""
+    import hashlib
+    import json
+    
+    current_hash = _compute_config_hash(goal, variables, group_levels, contrast, study_design, confidence, alternative, missing_policy, nonfinite_policy, seed)
+    last_hash = st.session_state.get("last_analysis_config_hash")
+    
+    if last_hash is not None and last_hash != current_hash:
+        _invalidate_pending_analysis()
+    
+    st.session_state.last_analysis_config_hash = current_hash
+
+
 def _render_goal_config(
     ws: Workspace,
     goal: Goal,
@@ -154,6 +189,7 @@ def _render_goal_config(
             options=list(sub_goals.keys()),
             format_func=lambda k: sub_goal_labels[k],
             horizontal=True,
+            key="sub_goal_radio",
         )
         actual_goal = selected_sub
         st.caption(sub_goals[actual_goal][1])
@@ -272,6 +308,13 @@ def _render_goal_config(
                 alternative=Alternative(alternative),
                 confidence_level=confidence,
                 seed=seed,
+            )
+
+            # Check if configuration changed and invalidate if needed
+            _check_and_invalidate_config(
+                actual_goal, variables, group_levels, contrast, 
+                study_design, confidence, alternative, missing_policy, 
+                nonfinite_policy, seed
             )
 
             # Check eligibility

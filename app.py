@@ -202,6 +202,18 @@ def main() -> None:
         render_results(ws)
     elif stage == JobStatus.EXPORT_READY.value:
         render_export(ws)
+    elif stage == JobStatus.FAILED.value:
+        # Render failure screen instead of rerun loop
+        st.error("Analysis failed. Please check the error message and try again.")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Retry", type="primary", use_container_width=True):
+                st.session_state.current_stage = JobStatus.RUNNING.value
+                st.rerun()
+        with col2:
+            if st.button("← Back to Question", use_container_width=True):
+                st.session_state.current_stage = JobStatus.PLAN_READY.value
+                st.rerun()
     else:
         st.error(f"Unknown stage: {stage}")
         if st.button("Reset Session"):

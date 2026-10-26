@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+import hashlib
 import streamlit as st
 
 from CleanSheet.contracts import JobStatus
 from CleanSheet.jobs.workspace import Workspace
 from CleanSheet.services.profile import run_profiling
 from CleanSheet.services.reports import generate_export_bundle
+
+
+def _compute_export_signature(results, recipe, column_roles, import_spec, include_charts: bool, include_data: bool) -> str:
+    """Compute a signature that uniquely identifies this export configuration."""
+    parts = [
+        results.run_id if results else "no_results",
+        results.request.goal.value if results and results.request else "no_request",
+        str([s.model_dump() for s in recipe]) if recipe else "no_recipe",
+        str([c.model_dump() for c in column_roles]) if column_roles else "no_roles",
+        import_spec.model_dump_json() if import_spec else "no_spec",
+        str(include_charts),
+        str(include_data),
+    ]
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
 def render_export(ws: Workspace) -> None:
@@ -59,14 +74,31 @@ def render_export(ws: Workspace) -> None:
 
     # Show download if ready
     if "export_zip_data" in st.session_state:
-        st.success("✅ Report ready!")
-        st.download_button(
-            "⬇️ Download Report",
-            data=st.session_state.export_zip_data,
-            file_name=st.session_state.export_filename,
-            mime="application/zip",
-            use_container_width=True,
+        # Verify the export is still valid for current settings
+        current_signature = _compute_export_signature(
+            st.session_state.get("results"),
+            st.session_state.get("recipe", []),
+            st.session_state.get("column_roles", []),
+            st.session_state.get("import_spec"),
+            st.session_state.get("export_include_charts", True),
+            st.session_state.get("export_include_data", False),
         )
+        
+        if st.session_state.get("export_signature") == current_signature:
+            st.success("✅ Report ready!")
+            st.download_button(
+                "⬇️ Download Report",
+                data=st.session_state.export_zip_data,
+                file_name=st.session_state.export_filename,
+                mime="application/zip",
+                use_container_width=True,
+            )
+        else:
+            st.warning("⚠️ Your report settings or analysis have changed. The previous report is no longer valid.")
+            if st.button("Clear old report"):
+                for key in ["export_zip_data", "export_filename", "export_signature"]:
+                    st.session_state.pop(key, None)
+                st.rerun()
 
     st.divider()
     if st.button("← Back to Results"):
@@ -107,9 +139,20 @@ def _generate_export(
             # Read the zip file
             zip_data = export_path.read_bytes()
 
+            # Compute signature for validation
+            signature = _compute_export_signature(
+                results, 
+                st.session_state.get("recipe", []),
+                st.session_state.get("column_roles", []),
+                st.session_state.get("import_spec"),
+                st.session_state.get("export_include_charts", True),
+                st.session_state.get("export_include_data", False),
+            )
+
             # Store in session state for persistent download
             st.session_state.export_zip_data = zip_data
             st.session_state.export_filename = export_path.name
+            st.session_state.export_signature = signature
 
             st.rerun()
 

@@ -114,8 +114,12 @@ def _render_summary(results, plan) -> None:
     # Show sample counts and exclusions prominently
     st.markdown("### Data used")
     col1, col2 = st.columns(2)
+    
+    # Compute observations included correctly based on method
+    n_included = _get_n_included(stat, plan)
     with col1:
-        st.metric("Observations included", sum(stat.group_counts.values()))
+        st.metric("Observations included", f"{n_included:,}")
+    
     with col2:
         excluded = sum(stat.exclusions.values()) if stat.exclusions else 0
         if excluded > 0:
@@ -124,21 +128,63 @@ def _render_summary(results, plan) -> None:
                 for k, v in stat.exclusions.items():
                     st.write(f"- {k}: {v}")
         else:
-            st.metric("Observations excluded", 0)
+            # Check if exclusions metadata is actually available
+            if stat.exclusions is not None and len(stat.exclusions) == 0:
+                st.metric("Observations excluded", 0)
+            else:
+                st.metric("Observations excluded", "Unavailable")
+
+
+def _get_n_included(stat, plan) -> int:
+    """Get the correct number of included observations based on analysis method."""
+    method = stat.method.value
+    counts = stat.group_counts
+    
+    if method == "welch_t":
+        # Two independent groups - sum of both group sizes
+        return sum(counts.values())
+    elif method == "paired_t":
+        # Paired test - return number of pairs
+        return counts.get("pairs", sum(counts.values()))
+    elif method in ("pearson_r", "spearman_rho"):
+        # Correlation - number of paired observations
+        return counts.get("n", sum(counts.values()))
+    elif method in ("chi2_independence", "fisher_exact"):
+        # Contingency table - total observations
+        return counts.get("n", sum(counts.values()))
+    elif method == "descriptive":
+        return counts.get("n_rows", sum(counts.values()))
+    else:
+        # Fallback
+        return sum(counts.values())
 
 
 def _render_compare_summary(stat, plan) -> None:
     """Render summary for two-group comparison."""
     outcome = plan.variables.get("outcome", "outcome")
-    group = plan.variables.get("group", "group")
     levels = plan.group_levels or []
+    contrast = plan.contrast or ""
+
+    # Parse contrast to determine which group was first/second in the difference
+    # contrast format: "A_minus_B" means A - B
+    if contrast and "_minus_" in contrast:
+        first_label, second_label = contrast.split("_minus_", 1)
+    elif len(levels) >= 2:
+        first_label, second_label = levels[0], levels[1]
+    else:
+        first_label, second_label = levels[0] if levels else "Group 1", levels[1] if len(levels) > 1 else "Group 2"
 
     if stat.estimate is not None and stat.interval and stat.interval_status == "computed":
-        direction = "higher" if stat.estimate > 0 else "lower"
+        # estimate = mean(first) - mean(second)
+        diff = stat.estimate
+        direction = "higher" if diff > 0 else "lower"
+        higher_label = first_label if diff > 0 else second_label
+        lower_label = second_label if diff > 0 else first_label
+        
         st.markdown(f"""
-        **In the analyzed data, {levels[0] if stat.estimate > 0 else levels[1]} averaged {abs(stat.estimate):.2f} units {direction} than {levels[1] if stat.estimate > 0 else levels[0]} on {outcome}.**  
+        **In the analyzed data, {higher_label} averaged {abs(diff):.2f} units {direction} than {lower_label} on {plan.variables.get("outcome", "the outcome")}.**  
 
-        The {plan.confidence_level:.0%} confidence interval for the difference is **[{stat.interval[0]:.2f}, {stat.interval[1]:.2f}]**.
+        The {plan.confidence_level:.0%} confidence interval for the difference ({first_label} minus {second_label}) is **[{stat.interval[0]:.2f}, {stat.interval[1]:.2f}]**.
 
         *This comparison does not establish that group membership caused the difference.*
         """)
@@ -149,14 +195,31 @@ def _render_compare_summary(stat, plan) -> None:
 def _render_paired_summary(stat, plan) -> None:
     """Render summary for paired comparison."""
     outcome = plan.variables.get("outcome", "outcome")
-    occasion = plan.variables.get("occasion", "occasion")
+    contrast = plan.contrast or ""
 
     if stat.estimate is not None and stat.interval and stat.interval_status == "computed":
-        direction = "increased" if stat.estimate > 0 else "decreased"
-        st.markdown(f"""
-        **In the analyzed data, {outcome} {direction} by {abs(stat.estimate):.2f} units on average from {plan.contrast.split('_minus_')[1] if stat.estimate < 0 else plan.contrast.split('_minus_')[0]} to {plan.contrast.split('_minus_')[0] if stat.estimate < 0 else plan.contrast.split('_minus_')[1]}.**  
+        diff = stat.estimate
+        
+        # Parse contrast to get before/after labels
+        if contrast and "_minus_" in contrast:
+            first_label, second_label = contrast.split("_minus_", 1)
+        else:
+            first_label, second_label = "before", "after"
 
-        The {plan.confidence_level:.0%} confidence interval for the mean paired difference is **[{stat.interval[0]:.2f}, {stat.interval[1]:.2f}]**.
+        # diff = mean(first) - mean(second)
+        if diff > 0:
+            direction = "higher"
+            higher_label = first_label
+            lower_label = second_label
+        else:
+            direction = "lower"
+            higher_label = second_label
+            lower_label = first_label
+        
+        st.markdown(f"""
+        **In the analyzed data, {plan.variables.get("outcome", "outcome")} was {abs(diff):.2f} units {direction} in {higher_label} than in {lower_label}.**  
+
+        The {plan.confidence_level:.0%} confidence interval for the mean paired difference ({first_label} minus {second_label}) is **[{stat.interval[0]:.2f}, {stat.interval[1]:.2f}]**.
 
         *This comparison does not establish that the occasion caused the change.*
         """)
@@ -173,10 +236,17 @@ def _render_correlation_summary(stat, plan) -> None:
     if stat.estimate is not None:
         strength = _interpret_strength(abs(stat.estimate))
         direction = "positive" if stat.estimate > 0 else "negative"
-        st.markdown(f"""
-        **There is a {strength} {direction} {method_name} correlation ({stat.estimate:.3f}) between {x} and {y}.**  
+        
+        # Build interval text separately to avoid nested conditionals in f-string
+        if stat.interval and stat.interval_status == "computed":
+            interval_text = f"The {plan.confidence_level:.0%} confidence interval is [{stat.interval[0]:.3f}, {stat.interval[1]:.3f}]."
+        else:
+            interval_text = "A confidence interval is unavailable for this result."
 
-        The {stat.interval_status == "computed" and f"{stat.confidence_level:.0%} confidence interval is [{stat.interval[0]:.3f}, {stat.interval[1]:.3f}]" if stat.interval and stat.interval_status == "computed" else "A confidence interval could not be computed."}
+        st.markdown(f"""
+        **There is a {strength} {direction} {method_name} correlation ({stat.estimate:.3f}) between {plan.variables.get("outcome", "X")} and {plan.variables.get("predictor", "Y")}.**  
+
+        {interval_text}
 
         *Correlation does not imply causation. This analysis does not establish that changes in one variable cause changes in the other.*
         """)
@@ -190,10 +260,13 @@ def _render_categorical_summary(stat, plan) -> None:
     col = plan.variables.get("group", "column")
 
     if stat.estimate is not None:
+        p_text = f"{stat.p_value:.4f}" if stat.p_value is not None else "Unavailable"
+        sig_text = "found a statistically significant association" if stat.p_value is not None and stat.p_value < 0.05 else "did not find a statistically significant association"
+        
         st.markdown(f"""
-        **There is an association between {row} and {col}.**  
+        **There is an association between {plan.variables.get("outcome", "row")} and {plan.variables.get("group", "column")}.**  
 
-        The {stat.method.value.replace('_', ' ').title()} test {'found a statistically significant association' if stat.p_value and stat.p_value < 0.05 else 'did not find a statistically significant association'} (p = {stat.p_value:.4f if stat.p_value else 'N/A'}).
+        The {stat.method.value.replace('_', ' ').title()} test {sig_text} (p = {p_text}).
 
         *Association does not imply causation.*
         """)

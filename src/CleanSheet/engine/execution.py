@@ -101,19 +101,41 @@ class LazyExecutor:
         max_rows: int,
         seed: int = 42,
     ) -> pl.DataFrame:
-        """Materialize a reproducible sample for plotting."""
+        """Materialize a reproducible sample for plotting.
+        
+        Uses efficient sampling that doesn't require full materialization first.
+        """
         lf = self.source_lf.select(columns)
-
-        # Stable sampling: sort by row index, then sample
-        # Note: sample() is not available on LazyFrame in Polars 2.0, so collect first
-        df = lf.collect(engine="streaming" if self.settings.polars_streaming else "in-memory")
         
-        # Add row index for stable sampling
-        df = df.with_row_index("_row_idx").sort("_row_idx")
+        # Get total row count for sampling fraction
+        total_rows = lf.select(pl.len()).collect().item()
+        max_n = min(max_rows, self.settings.max_plot_points, total_rows)
         
-        # Use deterministic sampling on the materialized DataFrame
-        max_n = min(max_rows, self.settings.max_plot_points, len(df))
-        df = df.sample(n=max_n, seed=seed, with_replacement=False)
+        if total_rows <= max_n:
+            # Small enough to collect entirely
+            df = lf.collect(engine="streaming" if self.settings.polars_streaming else "in-memory")
+            return df
+        
+        # For large datasets, use hash-based sampling to avoid full materialization
+        # Add a stable hash-based filter for reproducible sampling
+        sample_fraction = max_n / total_rows
+        
+        # Use hash-based deterministic sampling
+        # hash = hash(row_index, seed) % 10000 / 10000 < sample_fraction
+        lf = lf.with_row_index("_row_idx")
+        
+        # Use a simple deterministic hash for sampling
+        # This avoids full materialization by filtering during collection
+        hash_expr = (
+            (pl.col("_row_idx") * 1103515245 + 12345 + seed) % 2147483647
+        ) / 2147483647
+        
+        lf = lf.filter(hash_expr < sample_fraction)
+        
+        # Add row index for stable ordering, sort, and limit
+        df = lf.sort("_row_idx").limit(max_n).collect(
+            engine="streaming" if self.settings.polars_streaming else "in-memory"
+        )
         
         return df.drop("_row_idx")
 
