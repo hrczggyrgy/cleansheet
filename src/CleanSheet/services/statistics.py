@@ -19,7 +19,7 @@ from CleanSheet.contracts import (
     Method,
     StatisticalResult,
 )
-from CleanSheet.engine.execution import LazyExecutor
+from CleanSheet.engine.execution import LazyExecutor, get_prepared_lazy
 from CleanSheet.errors import EligibilityError
 from CleanSheet.jobs.workspace import Workspace
 
