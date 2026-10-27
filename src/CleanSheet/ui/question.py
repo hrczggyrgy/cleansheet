@@ -667,7 +667,10 @@ def _render_discovery_candidate_card(cand: DiscoveryCandidate, index: int, targe
                 st.metric("Score", f"{cand.composite_score:.0f}")
 
         with col3:
-            if st.button("Run Full Analysis", key=f"discovery_run_{index}_{cand.goal.value}", type="primary", width="stretch"):
+            # Create unique key from index, goal, and variables to avoid duplicates
+            var_str = "_".join(sorted(cand.variables.values())) if cand.variables else "none"
+            key = f"discovery_run_{index}_{cand.goal.value}_{var_str}"
+            if st.button("Run Full Analysis", key=key, type="primary", width="stretch"):
                 # Build analysis request from candidate
                 from CleanSheet.contracts import (
                     Alternative,
