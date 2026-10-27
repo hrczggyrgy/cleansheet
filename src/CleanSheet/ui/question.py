@@ -11,17 +11,21 @@ from CleanSheet.contracts import (
     Alternative,
     AnalysisMode,
     AnalysisRequest,
+    ColumnRole,
     DiscoveryCandidate,
     Goal,
     JobStatus,
     MissingPolicy,
     NonFinitePolicy,
+    PhysicalDtype,
+    SemanticRole,
     StudyDesign,
 )
 from CleanSheet.engine.assumptions import AssumptionReport, run_assumption_diagnostics
 from CleanSheet.engine.discovery import run_autonomous_discovery
 from CleanSheet.engine.execution import LazyExecutor, get_or_create_prepared
 from CleanSheet.jobs.workspace import Workspace
+from CleanSheet.services.ingest import infer_column_roles
 from CleanSheet.services.recommend import check_eligibility
 from CleanSheet.ui.accessibility import (
     announce_to_screen_reader,
@@ -46,6 +50,26 @@ def render_question(ws: Workspace) -> None:
     if dataset_ref is None:
         st.error("No dataset loaded.")
         return
+
+    # Defensive: if column_roles missing/empty, rebuild from dataset
+    if not column_roles:
+        executor = LazyExecutor(ws, dataset_ref)
+        preview_df = executor.preview(1000)
+        from CleanSheet.services.ingest import infer_column_roles
+        roles_dict = infer_column_roles(preview_df)
+        from CleanSheet.contracts import ColumnRole, PhysicalDtype, SemanticRole
+        column_roles = []
+        for col, info in roles_dict.items():
+            column_roles.append(ColumnRole(
+                column=col,
+                physical_dtype=PhysicalDtype(info["physical_dtype"]),
+                semantic_role=SemanticRole(info["semantic_role"]),
+                ordinal_order=info.get("ordinal_order"),
+                confidence=info.get("confidence", "medium"),
+                ambiguity_reason=info.get("ambiguity_reason"),
+                is_excluded=info.get("is_excluded", False),
+            ))
+        st.session_state.column_roles = column_roles
 
     st.title("❓ Ask a Question")
     st.caption("Choose what you want to learn from your data.")
