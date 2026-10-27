@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 
 import streamlit as st
 
@@ -667,9 +668,11 @@ def _render_discovery_candidate_card(cand: DiscoveryCandidate, index: int, targe
                 st.metric("Score", f"{cand.composite_score:.0f}")
 
         with col3:
-            # Create unique key from index, goal, and variables to avoid duplicates
+            # Create unique key from index, goal, variables, and UUID to guarantee uniqueness
             var_str = "_".join(sorted(cand.variables.values())) if cand.variables else "none"
-            key = f"discovery_run_{index}_{cand.goal.value}_{var_str}"
+            import uuid
+            unique_id = str(uuid.uuid4())[:8]
+            key = f"discovery_run_{index}_{cand.goal.value}_{var_str}_{unique_id}"
             if st.button("Run Full Analysis", key=key, type="primary", width="stretch"):
                 # Build analysis request from candidate
                 from CleanSheet.contracts import (
