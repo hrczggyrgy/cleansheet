@@ -318,6 +318,8 @@ def create_plot_spec(
     for role, col in variables.items():
         if col in data.columns and data[col].dtype in (pl.String, pl.Categorical):
             cats = data[col].unique().to_list()
+            # Filter out None/null values
+            cats = [c for c in cats if c is not None]
             if len(cats) <= 20:
                 category_order[col] = cats
 
