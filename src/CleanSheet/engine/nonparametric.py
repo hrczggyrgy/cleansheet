@@ -22,6 +22,7 @@ except ImportError:
 from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
+    Goal,
     IntervalMethod,
     Method,
     StatisticalResult,
@@ -34,10 +35,10 @@ def _bootstrap_rank_biserial_ci(
     confidence_level: float,
     seed: int,
     n_resamples: int = 2000,
-) -> tuple[float, float] | None:
-    """Bootstrap CI for rank-biserial correlation."""
+) -> tuple[tuple[float, float] | None, IntervalMethod, str]:
+    """Bootstrap CI for rank-biserial correlation. Returns (ci, method, status)."""
     if not HAS_BOOTSTRAP:
-        return None
+        return None, IntervalMethod.NOT_COMPUTED, "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
     try:
         from scipy.stats import mannwhitneyu
         rng = np.random.default_rng(seed)
@@ -56,9 +57,9 @@ def _bootstrap_rank_biserial_ci(
             paired=False,
             rng=rng,
         )
-        return float(ci.confidence_interval.low), float(ci.confidence_interval.high)
-    except Exception:
-        return None
+        return (float(ci.confidence_interval.low), float(ci.confidence_interval.high)), IntervalMethod.BOOTSTRAP_PERCENTILE, "computed"
+    except Exception as e:
+        return None, IntervalMethod.NOT_COMPUTED, f"failed: {e}"
 
 
 def _bootstrap_matched_rank_biserial_ci(
@@ -66,10 +67,10 @@ def _bootstrap_matched_rank_biserial_ci(
     confidence_level: float,
     seed: int,
     n_resamples: int = 2000,
-) -> tuple[float, float] | None:
-    """Bootstrap CI for matched rank-biserial correlation."""
+) -> tuple[tuple[float, float] | None, IntervalMethod, str]:
+    """Bootstrap CI for matched rank-biserial correlation. Returns (ci, method, status)."""
     if not HAS_BOOTSTRAP:
-        return None
+        return None, IntervalMethod.NOT_COMPUTED, "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
     try:
         from scipy.stats import wilcoxon
         rng = np.random.default_rng(seed)
@@ -95,9 +96,9 @@ def _bootstrap_matched_rank_biserial_ci(
             method="percentile",
             rng=rng,
         )
-        return float(ci.confidence_interval.low), float(ci.confidence_interval.high)
-    except Exception:
-        return None
+        return (float(ci.confidence_interval.low), float(ci.confidence_interval.high)), IntervalMethod.BOOTSTRAP_PERCENTILE, "computed"
+    except Exception as e:
+        return None, IntervalMethod.NOT_COMPUTED, f"failed: {e}"
 
 
 @dataclass
@@ -209,7 +210,7 @@ class MannWhitneyUAdapter(TestAdapter):
             es_interpretation = "large"
 
         # Bootstrap CI for rank-biserial correlation
-        effect_size_ci = _bootstrap_rank_biserial_ci(
+        effect_size_ci, effect_size_method, effect_size_status = _bootstrap_rank_biserial_ci(
             group_first, group_second, request.confidence_level, request.seed
         )
 
@@ -236,6 +237,8 @@ class MannWhitneyUAdapter(TestAdapter):
             effect_size=rank_biserial,
             effect_size_interpretation=es_interpretation,
             effect_size_ci=effect_size_ci,
+            effect_size_interval_method=effect_size_method,
+            effect_size_interval_status=effect_size_status,
             unstandardized_effect=hl_estimate,
             unstandardized_effect_ci=(ci_low, ci_high) if ci_low is not None else None,
             effect_magnitude_label=es_interpretation,
@@ -388,7 +391,7 @@ class WilcoxonSignedRankAdapter(TestAdapter):
             es_interpretation = "large"
 
         # Bootstrap CI for matched rank-biserial correlation
-        effect_size_ci = _bootstrap_matched_rank_biserial_ci(
+        effect_size_ci, effect_size_method, effect_size_status = _bootstrap_matched_rank_biserial_ci(
             diff, request.confidence_level, request.seed
         )
 
@@ -421,6 +424,8 @@ class WilcoxonSignedRankAdapter(TestAdapter):
             effect_size=rank_biserial,
             effect_size_interpretation=es_interpretation,
             effect_size_ci=effect_size_ci,
+            effect_size_interval_method=effect_size_method,
+            effect_size_interval_status=effect_size_status,
             unstandardized_effect=hl_estimate,
             unstandardized_effect_ci=(ci_low, ci_high) if ci_low is not None else None,
             effect_magnitude_label=es_interpretation,

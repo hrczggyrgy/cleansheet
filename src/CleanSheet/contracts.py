@@ -373,6 +373,8 @@ class StatisticalResult(BaseModel):
     effect_size: float | None = None
     effect_size_interpretation: str | None = None
     effect_size_ci: tuple[float, float] | None = None
+    effect_size_interval_method: IntervalMethod = IntervalMethod.NOT_COMPUTED
+    effect_size_interval_status: Literal["computed", "not_computed", "failed", "not_applicable"] = "not_computed"
     unstandardized_effect: float | None = None
     unstandardized_effect_ci: tuple[float, float] | None = None
     effect_magnitude_label: Literal["negligible", "small", "moderate", "large"] | None = None

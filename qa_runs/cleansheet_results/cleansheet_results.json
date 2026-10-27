@@ -1,0 +1,1679 @@
+{
+  "two_groups_csv": {
+    "welch_t": {
+      "run_id": "652a06091530",
+      "status": "complete",
+      "request": {
+        "goal": "compare_two_means",
+        "variables": {
+          "outcome": "value",
+          "group": "group"
+        },
+        "group_levels": [
+          "A",
+          "B"
+        ],
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Mean difference (A - B) in value",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "welch_t",
+          "group_counts": {
+            "A": 40,
+            "B": 35
+          },
+          "estimate": -2.4479131615959044,
+          "interval": [
+            -3.597663607073721,
+            -1.2981627161180878
+          ],
+          "interval_method": "parametric",
+          "interval_status": "computed",
+          "statistic": -4.262607257846897,
+          "degrees_of_freedom": 57.50182671283342,
+          "p_value": 7.598356419475134e-05,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "normality_group1": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9792146310927556,
+              "p_value": 0.6603901403380557,
+              "sample_size": 40
+            },
+            "normality_group2": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9720464054678971,
+              "p_value": 0.5018912617393797,
+              "sample_size": 35
+            },
+            "variance_ratio": 0.43410057175036804,
+            "contrast": "A minus B",
+            "group_sizes": {
+              "name": "group_sizes",
+              "passed": true,
+              "value": 35.0,
+              "threshold": 5.0,
+              "message": "Smallest group has n=35 (minimum 5 required)",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness": {
+              "name": "skewness",
+              "passed": true,
+              "value": 0.5195169177936282,
+              "threshold": 1.5,
+              "message": "Max group skewness: 0.52 (threshold: 1.5) \u2014 A: 0.21, B: -0.52",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": 0.0,
+              "threshold": 0.05,
+              "message": "Outliers (>3 IQR): 0/75 (0.0%)",
+              "severity": "info"
+            },
+            "variance_homogeneity": {
+              "name": "variance_homogeneity",
+              "passed": false,
+              "value": 0.01812555243759994,
+              "threshold": 0.05,
+              "message": "Brown-Forsythe test: p = 0.0181 \u2014 unequal variances detected. Welch's test recommended.",
+              "severity": "warning"
+            },
+            "normality": {
+              "name": "normality",
+              "passed": null,
+              "value": 0.5018912617393732,
+              "threshold": 0.05,
+              "message": "Shapiro-Wilk (supplementary): min p = 0.5019 across groups. Not used as sole gate.",
+              "severity": "info"
+            }
+          },
+          "effect_size": -1.0028356640993126,
+          "effect_size_interpretation": "large",
+          "effect_size_ci": [
+            -1.6124065538920072,
+            -0.49091212328815637
+          ],
+          "effect_size_interval_method": "bootstrap_percentile",
+          "effect_size_interval_status": "computed",
+          "unstandardized_effect": -2.4479131615959044,
+          "unstandardized_effect_ci": [
+            -3.597663607073721,
+            -1.2981627161180878
+          ],
+          "effect_magnitude_label": "large"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "welch_t",
+        "auto_routed": true,
+        "routing_explanation": "Assumption violations detected: Brown-Forsythe test: p = 0.0181 \u2014 unequal variances detected. Welch's test recommended.",
+        "assumption_checks": [
+          {
+            "name": "group_sizes",
+            "passed": true,
+            "value": 35.0,
+            "threshold": 5.0,
+            "message": "Smallest group has n=35 (minimum 5 required)",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness",
+            "passed": true,
+            "value": 0.5195169177936282,
+            "threshold": 1.5,
+            "message": "Max group skewness: 0.52 (threshold: 1.5) \u2014 A: 0.21, B: -0.52",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": 0.0,
+            "threshold": 0.05,
+            "message": "Outliers (>3 IQR): 0/75 (0.0%)",
+            "severity": "info"
+          },
+          {
+            "name": "variance_homogeneity",
+            "passed": false,
+            "value": 0.01812555243759994,
+            "threshold": 0.05,
+            "message": "Brown-Forsythe test: p = 0.0181 \u2014 unequal variances detected. Welch's test recommended.",
+            "severity": "warning"
+          },
+          {
+            "name": "normality",
+            "passed": null,
+            "value": 0.5018912617393732,
+            "threshold": 0.05,
+            "message": "Shapiro-Wilk (supplementary): min p = 0.5019 across groups. Not used as sole gate.",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:42.299201+00:00"
+    },
+    "mann_whitney": {
+      "run_id": "1a658102e3cd",
+      "status": "complete",
+      "request": {
+        "goal": "compare_two_means",
+        "variables": {
+          "outcome": "value",
+          "group": "group"
+        },
+        "group_levels": [
+          "A",
+          "B"
+        ],
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Mean difference (A - B) in value",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": "mann_whitney_u",
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "mann_whitney_u",
+          "group_counts": {
+            "A": 40,
+            "B": 35
+          },
+          "estimate": -2.6002987995673195,
+          "interval": [
+            -3.7691599476883444,
+            -1.48377427665727
+          ],
+          "interval_method": "bootstrap_percentile",
+          "interval_status": "computed",
+          "statistic": 320.0,
+          "degrees_of_freedom": null,
+          "p_value": 3.265226096393156e-05,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "test_type": "mann_whitney_u",
+            "n1": 40,
+            "n2": 35,
+            "method": "exact",
+            "contrast": "A minus B",
+            "group_sizes": {
+              "name": "group_sizes",
+              "passed": true,
+              "value": 35.0,
+              "threshold": 5.0,
+              "message": "Smallest group has n=35 (minimum 5 required)",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness": {
+              "name": "skewness",
+              "passed": true,
+              "value": 0.5195169177936282,
+              "threshold": 1.5,
+              "message": "Max group skewness: 0.52 (threshold: 1.5) \u2014 A: 0.21, B: -0.52",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": 0.0,
+              "threshold": 0.05,
+              "message": "Outliers (>3 IQR): 0/75 (0.0%)",
+              "severity": "info"
+            },
+            "variance_homogeneity": {
+              "name": "variance_homogeneity",
+              "passed": false,
+              "value": 0.01812555243759994,
+              "threshold": 0.05,
+              "message": "Brown-Forsythe test: p = 0.0181 \u2014 unequal variances detected. Welch's test recommended.",
+              "severity": "warning"
+            },
+            "normality": {
+              "name": "normality",
+              "passed": null,
+              "value": 0.5018912617393732,
+              "threshold": 0.05,
+              "message": "Shapiro-Wilk (supplementary): min p = 0.5019 across groups. Not used as sole gate.",
+              "severity": "info"
+            }
+          },
+          "effect_size": -0.5428571428571429,
+          "effect_size_interpretation": "large",
+          "effect_size_ci": [
+            -0.7514285714285714,
+            -0.3014285714285714
+          ],
+          "effect_size_interval_method": "bootstrap_percentile",
+          "effect_size_interval_status": "computed",
+          "unstandardized_effect": -2.6002987995673195,
+          "unstandardized_effect_ci": [
+            -3.7691599476883444,
+            -1.48377427665727
+          ],
+          "effect_magnitude_label": "large"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "mann_whitney_u",
+        "auto_routed": true,
+        "routing_explanation": "Assumption violations detected: Brown-Forsythe test: p = 0.0181 \u2014 unequal variances detected. Welch's test recommended.",
+        "assumption_checks": [
+          {
+            "name": "group_sizes",
+            "passed": true,
+            "value": 35.0,
+            "threshold": 5.0,
+            "message": "Smallest group has n=35 (minimum 5 required)",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness",
+            "passed": true,
+            "value": 0.5195169177936282,
+            "threshold": 1.5,
+            "message": "Max group skewness: 0.52 (threshold: 1.5) \u2014 A: 0.21, B: -0.52",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": 0.0,
+            "threshold": 0.05,
+            "message": "Outliers (>3 IQR): 0/75 (0.0%)",
+            "severity": "info"
+          },
+          {
+            "name": "variance_homogeneity",
+            "passed": false,
+            "value": 0.01812555243759994,
+            "threshold": 0.05,
+            "message": "Brown-Forsythe test: p = 0.0181 \u2014 unequal variances detected. Welch's test recommended.",
+            "severity": "warning"
+          },
+          {
+            "name": "normality",
+            "passed": null,
+            "value": 0.5018912617393732,
+            "threshold": 0.05,
+            "message": "Shapiro-Wilk (supplementary): min p = 0.5019 across groups. Not used as sole gate.",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:49.195895+00:00"
+    }
+  },
+  "paired_wide_csv": {
+    "paired_ttest_wide": {
+      "run_id": "d3588c290703",
+      "status": "complete",
+      "request": {
+        "goal": "compare_paired_means",
+        "variables": {
+          "pair_id": "subject_id",
+          "pre_col": "pre",
+          "post_col": "post"
+        },
+        "group_levels": null,
+        "contrast": null,
+        "study_design": "paired",
+        "design_confirmation_source": "user",
+        "estimand": "Mean difference (post - pre)",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "paired_t",
+          "group_counts": {
+            "post": 30,
+            "pre": 30
+          },
+          "estimate": 1.6157109891717727,
+          "interval": [
+            0.8125211610522931,
+            2.4189008172912523
+          ],
+          "interval_method": "parametric",
+          "interval_status": "computed",
+          "statistic": 4.114220440154895,
+          "degrees_of_freedom": 29,
+          "p_value": 0.0002931347102716216,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "normality_differences": {
+              "test": "shapiro_wilk",
+              "statistic": 0.972912846518415,
+              "p_value": 0.6215473925309093,
+              "sample_size": 30
+            },
+            "n_pairs": 30,
+            "contrast": "post minus pre",
+            "data_format": "wide (pre/post columns)",
+            "paired_sample_size": {
+              "name": "paired_sample_size",
+              "passed": true,
+              "value": 30.0,
+              "threshold": 6.0,
+              "message": "Complete pairs: n=30",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness_differences": {
+              "name": "skewness_differences",
+              "passed": true,
+              "value": 0.3602088210398177,
+              "threshold": 1.5,
+              "message": "Paired differences skewness: 0.36",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": 0.0,
+              "threshold": 0.05,
+              "message": "Outliers (>3 IQR on differences): 0/30 (0.0%)",
+              "severity": "info"
+            }
+          },
+          "effect_size": 0.7322138813112428,
+          "effect_size_interpretation": "moderate",
+          "effect_size_ci": [
+            0.43518644954426744,
+            1.1554112986507146
+          ],
+          "effect_size_interval_method": "bootstrap_percentile",
+          "effect_size_interval_status": "computed",
+          "unstandardized_effect": 1.6157109891717727,
+          "unstandardized_effect_ci": [
+            0.8125211610522931,
+            2.4189008172912523
+          ],
+          "effect_magnitude_label": "moderate"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "paired_t",
+        "auto_routed": false,
+        "routing_explanation": "All assumption checks passed. Parametric method appropriate.",
+        "assumption_checks": [
+          {
+            "name": "paired_sample_size",
+            "passed": true,
+            "value": 30.0,
+            "threshold": 6.0,
+            "message": "Complete pairs: n=30",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness_differences",
+            "passed": true,
+            "value": 0.3602088210398177,
+            "threshold": 1.5,
+            "message": "Paired differences skewness: 0.36",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": 0.0,
+            "threshold": 0.05,
+            "message": "Outliers (>3 IQR on differences): 0/30 (0.0%)",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:49.504474+00:00"
+    }
+  },
+  "paired_long_csv": {
+    "paired_ttest_long": {
+      "run_id": "c58a9d1c04af",
+      "status": "complete",
+      "request": {
+        "goal": "compare_paired_means",
+        "variables": {
+          "pair_id": "subject_id",
+          "occasion": "occasion",
+          "outcome": "value"
+        },
+        "group_levels": [
+          "pre",
+          "post"
+        ],
+        "contrast": null,
+        "study_design": "paired",
+        "design_confirmation_source": "user",
+        "estimand": "Mean difference (post - pre)",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "paired_t",
+          "group_counts": {
+            "pre": 30,
+            "post": 30
+          },
+          "estimate": -0.9610785575141728,
+          "interval": [
+            -4.5596744512178775,
+            2.637517336189532
+          ],
+          "interval_method": "parametric",
+          "interval_status": "computed",
+          "statistic": -0.5462203626934856,
+          "degrees_of_freedom": 29,
+          "p_value": 0.5890924659521354,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "normality_differences": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9623705290357,
+              "p_value": 0.3556286330869046,
+              "sample_size": 30
+            },
+            "n_pairs": 30,
+            "contrast": "pre minus post",
+            "data_format": "long (occasion column)",
+            "paired_sample_size": {
+              "name": "paired_sample_size",
+              "passed": true,
+              "value": 30.0,
+              "threshold": 6.0,
+              "message": "Complete pairs: n=30",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness_differences": {
+              "name": "skewness_differences",
+              "passed": true,
+              "value": 0.13025680842175,
+              "threshold": 1.5,
+              "message": "Paired differences skewness: -0.13",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": 0.0,
+              "threshold": 0.05,
+              "message": "Outliers (>3 IQR on differences): 0/60 (0.0%)",
+              "severity": "info"
+            }
+          },
+          "effect_size": -0.09721164376986427,
+          "effect_size_interpretation": "negligible",
+          "effect_size_ci": [
+            -0.4594434415074178,
+            0.26788389387808503
+          ],
+          "effect_size_interval_method": "bootstrap_percentile",
+          "effect_size_interval_status": "computed",
+          "unstandardized_effect": -0.9610785575141728,
+          "unstandardized_effect_ci": [
+            -4.5596744512178775,
+            2.637517336189532
+          ],
+          "effect_magnitude_label": "negligible"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "paired_t",
+        "auto_routed": false,
+        "routing_explanation": "All assumption checks passed. Parametric method appropriate.",
+        "assumption_checks": [
+          {
+            "name": "paired_sample_size",
+            "passed": true,
+            "value": 30.0,
+            "threshold": 6.0,
+            "message": "Complete pairs: n=30",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness_differences",
+            "passed": true,
+            "value": 0.13025680842175,
+            "threshold": 1.5,
+            "message": "Paired differences skewness: -0.13",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": 0.0,
+            "threshold": 0.05,
+            "message": "Outliers (>3 IQR on differences): 0/60 (0.0%)",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:49.813421+00:00"
+    }
+  },
+  "three_groups_csv": {
+    "kruskal": {
+      "run_id": "264702409aa4",
+      "status": "complete",
+      "request": {
+        "goal": "compare_k_means",
+        "variables": {
+          "outcome": "value",
+          "group": "group"
+        },
+        "group_levels": [
+          "G1",
+          "G2",
+          "G3"
+        ],
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Group differences in value across G1, G2, G3",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": "kruskal_wallis",
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "kruskal_wallis",
+          "group_counts": {
+            "G1": 25,
+            "G2": 25,
+            "G3": 25
+          },
+          "estimate": null,
+          "interval": null,
+          "interval_method": "not_applicable",
+          "interval_status": "not_applicable",
+          "statistic": 47.92471578947368,
+          "degrees_of_freedom": 2,
+          "p_value": 3.9199469799881037e-11,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "test_type": "kruskal_wallis",
+            "k_groups": 3,
+            "total_n": 75,
+            "group_sizes": {
+              "name": "group_sizes",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness": {
+              "name": "skewness",
+              "passed": true,
+              "value": 1.2278829671684244,
+              "threshold": 1.5,
+              "message": "Max group skewness: 1.23 (threshold: 1.5) \u2014 G1: -0.07, G2: 0.62, G3: 1.23",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": 0.0,
+              "threshold": 0.05,
+              "message": "Outliers (>3 IQR): 0/75 (0.0%)",
+              "severity": "info"
+            },
+            "variance_homogeneity": {
+              "name": "variance_homogeneity",
+              "passed": false,
+              "value": 0.03793982838114853,
+              "threshold": 0.05,
+              "message": "Brown-Forsythe test: p = 0.0379 \u2014 unequal variances detected. Welch's test recommended.",
+              "severity": "warning"
+            },
+            "normality": {
+              "name": "normality",
+              "passed": null,
+              "value": 0.0034118758429760878,
+              "threshold": 0.05,
+              "message": "Shapiro-Wilk (supplementary): min p = 0.0034 across groups. Not used as sole gate.",
+              "severity": "info"
+            }
+          },
+          "effect_size": 0.6378432748538011,
+          "effect_size_interpretation": "large",
+          "effect_size_ci": null,
+          "effect_size_interval_method": "not_computed",
+          "effect_size_interval_status": "not_computed",
+          "unstandardized_effect": null,
+          "unstandardized_effect_ci": null,
+          "effect_magnitude_label": "large"
+        },
+        {
+          "method": "games_howell_posthoc",
+          "group_counts": {
+            "G1": 25,
+            "G2": 25,
+            "G3": 25
+          },
+          "estimate": null,
+          "interval": null,
+          "interval_method": "not_applicable",
+          "interval_status": "not_applicable",
+          "statistic": null,
+          "degrees_of_freedom": null,
+          "p_value": null,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "test_type": "games_howell_posthoc",
+            "comparisons": [
+              {
+                "group1": "G1",
+                "group2": "G3",
+                "mean_diff": -8.403782899731386,
+                "t_statistic": -8.754756776582502,
+                "df": 32.24496556231348,
+                "p_value": 4.945430731595479e-10,
+                "n1": 25,
+                "n2": 25,
+                "adjusted_p_value": 1.4836292194786438e-09
+              },
+              {
+                "group1": "G1",
+                "group2": "G2",
+                "mean_diff": -4.616497310459673,
+                "t_statistic": -6.666589043971895,
+                "df": 40.75495394676643,
+                "p_value": 5.020091231600077e-08,
+                "n1": 25,
+                "n2": 25,
+                "adjusted_p_value": 1.0040182463200154e-07
+              },
+              {
+                "group1": "G2",
+                "group2": "G3",
+                "mean_diff": -3.787285589271713,
+                "t_statistic": -3.572890575348754,
+                "df": 41.57031182616938,
+                "p_value": 0.0009099632533244861,
+                "n1": 25,
+                "n2": 25,
+                "adjusted_p_value": 0.0009099632533244861
+              }
+            ],
+            "correction": "holm"
+          },
+          "effect_size": null,
+          "effect_size_interpretation": null,
+          "effect_size_ci": null,
+          "effect_size_interval_method": "not_computed",
+          "effect_size_interval_status": "not_computed",
+          "unstandardized_effect": null,
+          "unstandardized_effect_ci": null,
+          "effect_magnitude_label": null
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "kruskal_wallis",
+        "auto_routed": true,
+        "routing_explanation": "Assumption violations detected: Brown-Forsythe test: p = 0.0379 \u2014 unequal variances detected. Welch's test recommended.",
+        "assumption_checks": [
+          {
+            "name": "group_sizes",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness",
+            "passed": true,
+            "value": 1.2278829671684244,
+            "threshold": 1.5,
+            "message": "Max group skewness: 1.23 (threshold: 1.5) \u2014 G1: -0.07, G2: 0.62, G3: 1.23",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": 0.0,
+            "threshold": 0.05,
+            "message": "Outliers (>3 IQR): 0/75 (0.0%)",
+            "severity": "info"
+          },
+          {
+            "name": "variance_homogeneity",
+            "passed": false,
+            "value": 0.03793982838114853,
+            "threshold": 0.05,
+            "message": "Brown-Forsythe test: p = 0.0379 \u2014 unequal variances detected. Welch's test recommended.",
+            "severity": "warning"
+          },
+          {
+            "name": "normality",
+            "passed": null,
+            "value": 0.0034118758429760878,
+            "threshold": 0.05,
+            "message": "Shapiro-Wilk (supplementary): min p = 0.0034 across groups. Not used as sole gate.",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:49.872276+00:00"
+    }
+  },
+  "corr_csv": {
+    "pearson": {
+      "run_id": "5b29832c2ecf",
+      "status": "complete",
+      "request": {
+        "goal": "explore_linear_relationship",
+        "variables": {
+          "outcome": "x_linear",
+          "predictor": "y_linear"
+        },
+        "group_levels": null,
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Pearson correlation between x_linear and y_linear",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "pearson_r",
+          "group_counts": {
+            "n": 125
+          },
+          "estimate": 0.7771924377259859,
+          "interval": [
+            0.6966665517137878,
+            0.8383774956167374
+          ],
+          "interval_method": "parametric",
+          "interval_status": "computed",
+          "statistic": 0.7771924377259859,
+          "degrees_of_freedom": 123,
+          "p_value": 1.6583904948701697e-26,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "linearity": "Assessed via scatterplot",
+            "normality_x": {
+              "test": "shapiro_wilk",
+              "statistic": 0.7844036279249554,
+              "p_value": 2.8656319403925138e-12,
+              "sample_size": 125
+            },
+            "normality_y": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9822990132415172,
+              "p_value": 0.10144243159292315,
+              "sample_size": 125
+            },
+            "homoscedasticity": "Assessed via residual plot",
+            "correlation_sample_size": {
+              "name": "correlation_sample_size",
+              "passed": true,
+              "value": 125.0,
+              "threshold": 10.0,
+              "message": "Complete paired observations: n=125",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness": {
+              "name": "skewness",
+              "passed": false,
+              "value": 1.8354443739565292,
+              "threshold": 1.5,
+              "message": "High skewness (X: 1.84, Y: 0.05) \u2014 consider Spearman correlation",
+              "severity": "warning"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            }
+          },
+          "effect_size": 0.7771924377259859,
+          "effect_size_interpretation": "large",
+          "effect_size_ci": [
+            0.6966665517137878,
+            0.8383774956167374
+          ],
+          "effect_size_interval_method": "not_computed",
+          "effect_size_interval_status": "not_computed",
+          "unstandardized_effect": 0.7771924377259859,
+          "unstandardized_effect_ci": [
+            0.6966665517137878,
+            0.8383774956167374
+          ],
+          "effect_magnitude_label": "large"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "pearson_r",
+        "auto_routed": true,
+        "routing_explanation": "Assumption violations detected: High skewness (X: 1.84, Y: 0.05) \u2014 consider Spearman correlation",
+        "assumption_checks": [
+          {
+            "name": "correlation_sample_size",
+            "passed": true,
+            "value": 125.0,
+            "threshold": 10.0,
+            "message": "Complete paired observations: n=125",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness",
+            "passed": false,
+            "value": 1.8354443739565292,
+            "threshold": 1.5,
+            "message": "High skewness (X: 1.84, Y: 0.05) \u2014 consider Spearman correlation",
+            "severity": "warning"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:49.912813+00:00"
+    },
+    "spearman": {
+      "run_id": "b1d827fc4257",
+      "status": "complete",
+      "request": {
+        "goal": "explore_ordered_relationship",
+        "variables": {
+          "outcome": "x_linear",
+          "predictor": "y_linear"
+        },
+        "group_levels": null,
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Spearman correlation between x_linear and y_linear",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": "spearman_rho",
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "spearman_rho",
+          "group_counts": {
+            "n": 125
+          },
+          "estimate": 0.8292596006144392,
+          "interval": [
+            0.7504040865793511,
+            0.8850743616823292
+          ],
+          "interval_method": "bootstrap_percentile",
+          "interval_status": "computed",
+          "statistic": 0.8292596006144392,
+          "degrees_of_freedom": null,
+          "p_value": 7.152629711730258e-33,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "monotonicity": "Assessed via scatterplot",
+            "ties_x": 0,
+            "ties_y": 0,
+            "permutation_test": false,
+            "correlation_sample_size": {
+              "name": "correlation_sample_size",
+              "passed": true,
+              "value": 125.0,
+              "threshold": 10.0,
+              "message": "Complete paired observations: n=125",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            }
+          },
+          "effect_size": 0.8292596006144392,
+          "effect_size_interpretation": "large",
+          "effect_size_ci": [
+            0.7504040865793511,
+            0.8850743616823292
+          ],
+          "effect_size_interval_method": "not_computed",
+          "effect_size_interval_status": "not_computed",
+          "unstandardized_effect": 0.8292596006144392,
+          "unstandardized_effect_ci": [
+            0.7504040865793511,
+            0.8850743616823292
+          ],
+          "effect_magnitude_label": "large"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "spearman_rho",
+        "auto_routed": false,
+        "routing_explanation": "All assumption checks passed. Parametric method appropriate.",
+        "assumption_checks": [
+          {
+            "name": "correlation_sample_size",
+            "passed": true,
+            "value": 125.0,
+            "threshold": 10.0,
+            "message": "Complete paired observations: n=125",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:54.419881+00:00"
+    }
+  },
+  "table_2x2_csv": {
+    "chisquare_fisher": {
+      "run_id": "bd204875b2e2",
+      "status": "complete",
+      "request": {
+        "goal": "categorical_association",
+        "variables": {
+          "outcome": "outcome",
+          "group": "group"
+        },
+        "group_levels": null,
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Association between outcome and group",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "chi2_independence",
+          "group_counts": {
+            "n": 10,
+            "rows": 2,
+            "cols": 2
+          },
+          "estimate": 0.0,
+          "interval": null,
+          "interval_method": "not_applicable",
+          "interval_status": "not_applicable",
+          "statistic": 0.0,
+          "degrees_of_freedom": 1,
+          "p_value": 1.0,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {
+            "dropped_null_rows": 0
+          },
+          "assumption_checks": {
+            "expected_counts": {
+              "name": "expected_counts",
+              "passed": false,
+              "value": 2.0,
+              "threshold": 5.0,
+              "message": "Min expected count: 2.0 (< 5), 4/4 cells below 5 \u2014 Fisher's exact or Monte Carlo recommended",
+              "severity": "warning"
+            },
+            "min_expected": 2.0,
+            "cells_below_5": 4,
+            "row_names": [
+              0,
+              1
+            ],
+            "col_names": [
+              "1",
+              "0"
+            ],
+            "contingency_sample_size": {
+              "name": "contingency_sample_size",
+              "passed": false,
+              "value": 10.0,
+              "threshold": 15.0,
+              "message": "Only 10 observations \u2014 below minimum 15",
+              "severity": "error"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            }
+          },
+          "effect_size": 0.0,
+          "effect_size_interpretation": "negligible",
+          "effect_size_ci": null,
+          "effect_size_interval_method": "not_computed",
+          "effect_size_interval_status": "not_computed",
+          "unstandardized_effect": 0.0,
+          "unstandardized_effect_ci": null,
+          "effect_magnitude_label": "negligible"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "chi2_independence",
+        "auto_routed": false,
+        "routing_explanation": "Analysis blocked: Only 10 observations \u2014 below minimum 15",
+        "assumption_checks": [
+          {
+            "name": "contingency_sample_size",
+            "passed": false,
+            "value": 10.0,
+            "threshold": 15.0,
+            "message": "Only 10 observations \u2014 below minimum 15",
+            "severity": "error"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "expected_counts",
+            "passed": false,
+            "value": 2.0,
+            "threshold": 5.0,
+            "message": "Min expected count: 2.0 (< 5), 4/4 cells below 5 \u2014 Fisher's exact or Monte Carlo recommended",
+            "severity": "warning"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:54.456581+00:00"
+    }
+  },
+  "penguins_csv": {
+    "penguins_welch_bill_by_sex": {
+      "run_id": "969f6bde814a",
+      "status": "complete",
+      "request": {
+        "goal": "compare_two_means",
+        "variables": {
+          "outcome": "bill_length_mm",
+          "group": "sex"
+        },
+        "group_levels": [
+          "Female",
+          "Male"
+        ],
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Mean difference (Female - Male) in bill_length_mm",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "welch_t",
+          "group_counts": {
+            "Female": 165,
+            "Male": 168
+          },
+          "estimate": -3.757792207792214,
+          "interval": [
+            -4.865676303402873,
+            -2.649908112181555
+          ],
+          "interval_method": "parametric",
+          "interval_status": "computed",
+          "statistic": -6.67245551331115,
+          "degrees_of_freedom": 329.2902563040335,
+          "p_value": 1.066456611584061e-10,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "normality_group1": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9501892252181353,
+              "p_value": 1.3953201655713329e-05,
+              "sample_size": 165
+            },
+            "normality_group2": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9412975675317864,
+              "p_value": 2.0742262607033033e-06,
+              "sample_size": 168
+            },
+            "variance_ratio": 0.8347602788385136,
+            "contrast": "Female minus Male",
+            "group_sizes": {
+              "name": "group_sizes",
+              "passed": true,
+              "value": 165.0,
+              "threshold": 5.0,
+              "message": "Smallest group has n=165 (minimum 5 required)",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness": {
+              "name": "skewness",
+              "passed": true,
+              "value": 0.11343876598863589,
+              "threshold": 1.5,
+              "message": "Max group skewness: 0.11 (threshold: 1.5) \u2014 Female: 0.05, Male: -0.11",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": 0.0,
+              "threshold": 0.05,
+              "message": "Outliers (>3 IQR): 0/342 (0.0%)",
+              "severity": "info"
+            },
+            "variance_homogeneity": {
+              "name": "variance_homogeneity",
+              "passed": true,
+              "value": 0.09378255090773167,
+              "threshold": 0.05,
+              "message": "Brown-Forsythe test: p = 0.0938 (variances appear equal)",
+              "severity": "info"
+            },
+            "normality": {
+              "name": "normality",
+              "passed": null,
+              "value": 2.0742262607034803e-06,
+              "threshold": 0.05,
+              "message": "Shapiro-Wilk (supplementary): min p = 0.0000 across groups. Not used as sole gate.",
+              "severity": "info"
+            }
+          },
+          "effect_size": -0.7290743947259876,
+          "effect_size_interpretation": "moderate",
+          "effect_size_ci": [
+            -0.959746693647793,
+            -0.49638298027421973
+          ],
+          "effect_size_interval_method": "bootstrap_percentile",
+          "effect_size_interval_status": "computed",
+          "unstandardized_effect": -3.757792207792214,
+          "unstandardized_effect_ci": [
+            -4.865676303402873,
+            -2.649908112181555
+          ],
+          "effect_magnitude_label": "moderate"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "welch_t",
+        "auto_routed": false,
+        "routing_explanation": "All assumption checks passed. Parametric method appropriate.",
+        "assumption_checks": [
+          {
+            "name": "group_sizes",
+            "passed": true,
+            "value": 165.0,
+            "threshold": 5.0,
+            "message": "Smallest group has n=165 (minimum 5 required)",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness",
+            "passed": true,
+            "value": 0.11343876598863589,
+            "threshold": 1.5,
+            "message": "Max group skewness: 0.11 (threshold: 1.5) \u2014 Female: 0.05, Male: -0.11",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": 0.0,
+            "threshold": 0.05,
+            "message": "Outliers (>3 IQR): 0/342 (0.0%)",
+            "severity": "info"
+          },
+          {
+            "name": "variance_homogeneity",
+            "passed": true,
+            "value": 0.09378255090773167,
+            "threshold": 0.05,
+            "message": "Brown-Forsythe test: p = 0.0938 (variances appear equal)",
+            "severity": "info"
+          },
+          {
+            "name": "normality",
+            "passed": null,
+            "value": 2.0742262607034803e-06,
+            "threshold": 0.05,
+            "message": "Shapiro-Wilk (supplementary): min p = 0.0000 across groups. Not used as sole gate.",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:55.151584+00:00"
+    },
+    "penguins_pearson_bill": {
+      "run_id": "a694532c0aa1",
+      "status": "complete",
+      "request": {
+        "goal": "explore_linear_relationship",
+        "variables": {
+          "outcome": "bill_length_mm",
+          "predictor": "bill_depth_mm"
+        },
+        "group_levels": null,
+        "contrast": null,
+        "study_design": "independent",
+        "design_confirmation_source": "user",
+        "estimand": "Pearson correlation between bill_length_mm and bill_depth_mm",
+        "missing_policy": "required_columns_complete_cases",
+        "nonfinite_policy": "exclude_and_report",
+        "method": null,
+        "alternative": "two-sided",
+        "confidence_level": 0.95,
+        "analysis_purpose": "exploratory",
+        "multiplicity": {
+          "method": "none",
+          "family_size": 1
+        },
+        "seed": 42
+      },
+      "statistical_results": [
+        {
+          "method": "pearson_r",
+          "group_counts": {
+            "n": 342
+          },
+          "estimate": -0.2350528703555327,
+          "interval": [
+            -0.3328071943224521,
+            -0.13230042585590363
+          ],
+          "interval_method": "parametric",
+          "interval_status": "computed",
+          "statistic": -0.2350528703555327,
+          "degrees_of_freedom": 340,
+          "p_value": 1.1196621961373343e-05,
+          "adjusted_p_value": null,
+          "q_value": null,
+          "m_comparisons": 1,
+          "exclusions": {},
+          "assumption_checks": {
+            "linearity": "Assessed via scatterplot",
+            "normality_x": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9748548093695076,
+              "p_value": 1.1197298006123259e-05,
+              "sample_size": 342
+            },
+            "normality_y": {
+              "test": "shapiro_wilk",
+              "statistic": 0.9725837539090837,
+              "p_value": 4.418820100616601e-06,
+              "sample_size": 342
+            },
+            "homoscedasticity": "Assessed via residual plot",
+            "correlation_sample_size": {
+              "name": "correlation_sample_size",
+              "passed": true,
+              "value": 342.0,
+              "threshold": 10.0,
+              "message": "Complete paired observations: n=342",
+              "severity": "info"
+            },
+            "missingness_balance": {
+              "name": "missingness_balance",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            },
+            "skewness": {
+              "name": "skewness",
+              "passed": true,
+              "value": 0.14283462620259565,
+              "threshold": 1.5,
+              "message": "Max skewness: 0.14 (X: 0.05, Y: -0.14)",
+              "severity": "info"
+            },
+            "outliers": {
+              "name": "outliers",
+              "passed": true,
+              "value": null,
+              "threshold": null,
+              "message": "Not applicable",
+              "severity": "info"
+            }
+          },
+          "effect_size": -0.2350528703555327,
+          "effect_size_interpretation": "small",
+          "effect_size_ci": [
+            -0.3328071943224521,
+            -0.13230042585590363
+          ],
+          "effect_size_interval_method": "not_computed",
+          "effect_size_interval_status": "not_computed",
+          "unstandardized_effect": -0.2350528703555327,
+          "unstandardized_effect_ci": [
+            -0.3328071943224521,
+            -0.13230042585590363
+          ],
+          "effect_magnitude_label": "small"
+        }
+      ],
+      "plots": [],
+      "warnings": [],
+      "provenance": {
+        "method": "pearson_r",
+        "auto_routed": false,
+        "routing_explanation": "All assumption checks passed. Parametric method appropriate.",
+        "assumption_checks": [
+          {
+            "name": "correlation_sample_size",
+            "passed": true,
+            "value": 342.0,
+            "threshold": 10.0,
+            "message": "Complete paired observations: n=342",
+            "severity": "info"
+          },
+          {
+            "name": "missingness_balance",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          },
+          {
+            "name": "skewness",
+            "passed": true,
+            "value": 0.14283462620259565,
+            "threshold": 1.5,
+            "message": "Max skewness: 0.14 (X: 0.05, Y: -0.14)",
+            "severity": "info"
+          },
+          {
+            "name": "outliers",
+            "passed": true,
+            "value": null,
+            "threshold": null,
+            "message": "Not applicable",
+            "severity": "info"
+          }
+        ],
+        "seed": 42
+      },
+      "artifact_refs": {},
+      "created_at": "2026-10-27 19:30:55.168469+00:00"
+    }
+  }
+}

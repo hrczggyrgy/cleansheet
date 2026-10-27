@@ -25,10 +25,10 @@ def _bootstrap_effect_size_ci(
     confidence_level: float,
     seed: int,
     n_resamples: int = 2000,
-) -> tuple[float, float] | None:
-    """Bootstrap CI for a standardized effect size."""
+) -> tuple[tuple[float, float] | None, IntervalMethod, str]:
+    """Bootstrap CI for a standardized effect size. Returns (ci, method, status)."""
     if not HAS_BOOTSTRAP:
-        return None
+        return None, IntervalMethod.NOT_COMPUTED, "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
     try:
         rng = np.random.default_rng(seed)
         n1, n2 = len(group_first), len(group_second)
@@ -45,9 +45,9 @@ def _bootstrap_effect_size_ci(
             paired=False,
             rng=rng,
         )
-        return float(ci.confidence_interval.low), float(ci.confidence_interval.high)
-    except Exception:
-        return None
+        return (float(ci.confidence_interval.low), float(ci.confidence_interval.high)), IntervalMethod.BOOTSTRAP_PERCENTILE, "computed"
+    except Exception as e:
+        return None, IntervalMethod.NOT_COMPUTED, f"failed: {e}"
 
 
 def _bootstrap_paired_effect_size_ci(
@@ -56,10 +56,10 @@ def _bootstrap_paired_effect_size_ci(
     confidence_level: float,
     seed: int,
     n_resamples: int = 2000,
-) -> tuple[float, float] | None:
-    """Bootstrap CI for paired effect size."""
+) -> tuple[tuple[float, float] | None, IntervalMethod, str]:
+    """Bootstrap CI for paired effect size. Returns (ci, method, status)."""
     if not HAS_BOOTSTRAP:
-        return None
+        return None, IntervalMethod.NOT_COMPUTED, "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
     try:
         rng = np.random.default_rng(seed)
 
@@ -74,9 +74,9 @@ def _bootstrap_paired_effect_size_ci(
             method="percentile",
             rng=rng,
         )
-        return float(ci.confidence_interval.low), float(ci.confidence_interval.high)
-    except Exception:
-        return None
+        return (float(ci.confidence_interval.low), float(ci.confidence_interval.high)), IntervalMethod.BOOTSTRAP_PERCENTILE, "computed"
+    except Exception as e:
+        return None, IntervalMethod.NOT_COMPUTED, f"failed: {e}"
 
 
 def _hedges_g(x1: np.ndarray, x2: np.ndarray) -> float:
@@ -221,7 +221,7 @@ class WelchTTestAdapter(TestAdapter):
         hedges_g = cohen_d * hedges_correction
 
         # Bootstrap CI for Hedges' g
-        effect_size_ci = _bootstrap_effect_size_ci(
+        effect_size_ci, effect_size_method, effect_size_status = _bootstrap_effect_size_ci(
             group_first, group_second, _hedges_g,
             request.confidence_level, request.seed
         )
@@ -248,6 +248,8 @@ class WelchTTestAdapter(TestAdapter):
             effect_size=float(hedges_g),
             effect_size_interpretation=_interpret_hedges_g(hedges_g),
             effect_size_ci=effect_size_ci,
+            effect_size_interval_method=effect_size_method,
+            effect_size_interval_status=effect_size_status,
             unstandardized_effect=float(mean_diff),
             unstandardized_effect_ci=(float(ci_low), float(ci_high)),
             effect_magnitude_label=_interpret_hedges_g(hedges_g),
@@ -322,12 +324,18 @@ class PairedTTestAdapter(TestAdapter):
             if len(occasion_cols) != 2:
                 raise EligibilityError("Paired test requires exactly two occasions")
 
-            # Determine contrast order
-            if contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
+            # Determine contrast order using group_levels if available (user-specified order)
+            group_levels = request.group_levels
+            if group_levels and len(group_levels) == 2:
+                # Use user-specified order: group_levels[0] minus group_levels[1]
+                first, second = group_levels[0], group_levels[1]
+            elif contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
+                # Fallback: parse contrast string if it matches occasion column order
                 first, second = occasion_cols[0], occasion_cols[1]
             elif contrast and contrast.endswith(f"_minus_{occasion_cols[0]}") and contrast.startswith(f"{occasion_cols[1]}_"):
                 first, second = occasion_cols[1], occasion_cols[0]
             else:
+                # Default to alphabetical/data order
                 first, second = occasion_cols[0], occasion_cols[1]
 
             vals_first = wide[first].to_numpy()
@@ -363,7 +371,7 @@ class PairedTTestAdapter(TestAdapter):
         hedges_g = cohen_d * hedges_correction
 
         # Bootstrap CI for Hedges' g
-        effect_size_ci = _bootstrap_paired_effect_size_ci(
+        effect_size_ci, effect_size_method, effect_size_status = _bootstrap_paired_effect_size_ci(
             diff, _hedges_g_paired,
             request.confidence_level, request.seed
         )
@@ -396,6 +404,8 @@ class PairedTTestAdapter(TestAdapter):
             effect_size=float(hedges_g),
             effect_size_interpretation=_interpret_hedges_g(hedges_g),
             effect_size_ci=effect_size_ci,
+            effect_size_interval_method=effect_size_method,
+            effect_size_interval_status=effect_size_status,
             unstandardized_effect=float(mean_diff),
             unstandardized_effect_ci=(float(ci_low), float(ci_high)),
             effect_magnitude_label=_interpret_hedges_g(hedges_g),
