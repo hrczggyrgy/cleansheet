@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
@@ -180,7 +180,7 @@ class DatasetRef(BaseModel):
     schema_hash: str = Field(..., description="Hash of column names + physical dtypes")
     row_count: int = Field(..., ge=0, description="Number of rows in source")
     column_count: int = Field(..., ge=0, description="Number of columns in source")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod
     def from_bytes(cls, data: bytes, workspace_id: str, fmt: Literal["csv", "parquet"]) -> DatasetRef:
@@ -201,7 +201,7 @@ class ImportSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    encoding: str = Field(default="utf-8", description="Text encoding")
+    encoding: str = Field(default="utf8", description="Text encoding")
     delimiter: str = Field(default=",", description="CSV delimiter")
     decimal_comma: bool = Field(default=False, description="European decimal comma")
     date_format: str | None = Field(default=None, description="Explicit date format (e.g. %Y-%m-%d)")
@@ -270,7 +270,7 @@ class CleaningStep(BaseModel):
     output_schema: dict[str, str]
     affected_row_count: int
     affected_column_count: int
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     reversible: bool = Field(default=True)
     description: str = Field(default="")
 
@@ -408,7 +408,7 @@ class AnalysisResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     provenance: dict[str, Any] = Field(default_factory=dict)
     artifact_refs: dict[str, str] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class DiscoveryCandidate(BaseModel):
@@ -479,7 +479,7 @@ class SessionState(BaseModel):
     analysis_mode: AnalysisMode = AnalysisMode.GUIDED
     active_job_id: str | None = None
     result_refs: dict[str, str] = Field(default_factory=dict)
-    last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity: datetime = Field(default_factory=lambda: datetime.now(UTC))
     stale_results: bool = Field(default=False)
 
 

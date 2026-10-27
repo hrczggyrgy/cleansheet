@@ -7,6 +7,7 @@ from typing import Any
 
 import polars as pl
 
+from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
     EligibilityResult,
@@ -15,7 +16,6 @@ from CleanSheet.contracts import (
     SemanticRole,
     StudyDesign,
 )
-from CleanSheet.config import get_settings
 from CleanSheet.engine.execution import LazyExecutor, get_prepared_lazy
 from CleanSheet.jobs.workspace import Workspace
 
@@ -123,7 +123,7 @@ ELIGIBILITY_GATES: dict[Goal, list[EligibilityGate]] = {
             rule_id="two_categorical",
             description="Both variables must be categorical",
             check=lambda req, df, roles: all(
-                roles.get(req.variables.get(k, "")) == SemanticRole.CATEGORICAL
+                roles.get(req.variables.get(k, "")) == SemanticRole.NOMINAL
                 for k in ["outcome", "group"]
             ),
         ),
@@ -382,7 +382,7 @@ def check_eligibility(
             elif s.dtype in (pl.Date, pl.Datetime):
                 roles[col] = SemanticRole.DATE
             elif s.dtype == pl.Boolean or (s.n_unique() / len(s) < 0.05 and s.n_unique() <= 20):
-                roles[col] = SemanticRole.CATEGORICAL
+                roles[col] = SemanticRole.NOMINAL
             else:
                 roles[col] = SemanticRole.FREE_TEXT
 

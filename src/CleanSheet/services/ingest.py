@@ -261,17 +261,17 @@ def infer_column_roles(df: pl.DataFrame) -> dict[str, dict[str, Any]]:
         elif phys in (PhysicalDtype.INT64, PhysicalDtype.FLOAT64):
             # Check if it's actually categorical (low cardinality numeric)
             if n_unique <= 20 and n_unique / total < 0.05:
-                semantic = SemanticRole.CATEGORICAL
+                semantic = SemanticRole.NOMINAL
             else:
                 semantic = SemanticRole.CONTINUOUS
         elif phys == PhysicalDtype.BOOLEAN:
-            semantic = SemanticRole.CATEGORICAL
+            semantic = SemanticRole.NOMINAL
         elif phys in (PhysicalDtype.CATEGORICAL, PhysicalDtype.STRING):
             # Check cardinality
             if n_unique / total > 0.5:
                 semantic = SemanticRole.FREE_TEXT
             else:
-                semantic = SemanticRole.CATEGORICAL
+                semantic = SemanticRole.NOMINAL
         else:
             semantic = SemanticRole.FREE_TEXT
 

@@ -32,10 +32,10 @@ def _bootstrap_effect_size_ci(
     try:
         rng = np.random.default_rng(seed)
         n1, n2 = len(group_first), len(group_second)
-        
+
         def statistic(x1, x2):
             return effect_fn(x1, x2)
-        
+
         ci = bootstrap(
             (group_first, group_second),
             statistic,
@@ -62,10 +62,10 @@ def _bootstrap_paired_effect_size_ci(
         return None
     try:
         rng = np.random.default_rng(seed)
-        
+
         def statistic(x):
             return effect_fn(x)
-        
+
         ci = bootstrap(
             (diff,),
             statistic,
@@ -252,8 +252,9 @@ class WelchTTestAdapter(TestAdapter):
 
 
 class PairedTTestAdapter(TestAdapter):
-    """Paired samples t-test. Supports both long format (Subject_ID, Occasion, Outcome) 
-    and wide format (Subject_ID, Pre_Value, Post_Value)."""
+    """Paired samples t-test. Supports both long format (Subject_ID, Occasion, Outcome)
+    and wide format (Subject_ID, Pre_Value, Post_Value).
+    """
 
     def __init__(self) -> None:
         super().__init__(Method.PAIRED_T, "Paired t-test")
@@ -261,15 +262,15 @@ class PairedTTestAdapter(TestAdapter):
     def run(self, df: pl.DataFrame, request: AnalysisRequest) -> StatisticalResult:
         pair_col = request.variables.get("pair_id")
         contrast = request.contrast
-        
+
         # Detect data format
         is_wide_format = "pre_col" in request.variables and "post_col" in request.variables
-        
+
         if is_wide_format:
             # Wide format: Subject_ID, Pre_Value, Post_Value
             pre_col = request.variables["pre_col"]
             post_col = request.variables["post_col"]
-            
+
             # Filter to complete pairs
             data = df.filter(
                 pl.col(pre_col).is_not_null() &
@@ -279,44 +280,44 @@ class PairedTTestAdapter(TestAdapter):
                 ~pl.col(pre_col).is_nan() &
                 ~pl.col(post_col).is_nan()
             )
-            
+
             if len(data) < 2:
                 raise EligibilityError("Need at least 2 complete pairs")
-            
+
             vals_pre = data[pre_col].to_numpy()
             vals_post = data[post_col].to_numpy()
-            
+
             # Contrast is already set as "post_col_minus_pre_col"
             first, second = post_col, pre_col
             vals_first = vals_post
             vals_second = vals_pre
-            
+
             # For reporting
             first_label, second_label = post_col, pre_col
             n_pairs = len(data)
-            
+
         else:
             # Long format: Subject_ID, Occasion, Outcome
             outcome_col = request.variables["outcome"]
             occasion_col = request.variables["occasion"]
             pair_col = request.variables.get("pair_id")
-            
+
             if not pair_col or not occasion_col or not outcome_col:
                 raise EligibilityError("Paired test requires pair_id, occasion, and outcome variables")
-            
+
             wide = df.pivot(
                 values=outcome_col,
                 index=pair_col,
                 on=occasion_col,
             ).drop_nulls()
-            
+
             if wide.width < 3:
                 raise EligibilityError("Need at least two occasions for paired test")
-            
+
             occasion_cols = [c for c in wide.columns if c != pair_col]
             if len(occasion_cols) != 2:
                 raise EligibilityError("Paired test requires exactly two occasions")
-            
+
             # Determine contrast order
             if contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
                 first, second = occasion_cols[0], occasion_cols[1]
@@ -324,13 +325,13 @@ class PairedTTestAdapter(TestAdapter):
                 first, second = occasion_cols[1], occasion_cols[0]
             else:
                 first, second = occasion_cols[0], occasion_cols[1]
-            
+
             vals_first = wide[first].to_numpy()
             vals_second = wide[second].to_numpy()
-            
+
             if len(vals_first) < 2:
                 raise EligibilityError("Need at least 2 complete pairs")
-            
+
             n_pairs = len(vals_first)
             first_label, second_label = first, second
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+
 import streamlit as st
 
 from CleanSheet.contracts import (
@@ -17,16 +18,16 @@ from CleanSheet.contracts import (
     NonFinitePolicy,
     StudyDesign,
 )
-from CleanSheet.engine.assumptions import run_assumption_diagnostics, AssumptionReport
+from CleanSheet.engine.assumptions import AssumptionReport, run_assumption_diagnostics
 from CleanSheet.engine.discovery import run_autonomous_discovery
 from CleanSheet.engine.execution import LazyExecutor, get_or_create_prepared
 from CleanSheet.jobs.workspace import Workspace
 from CleanSheet.services.recommend import check_eligibility
 from CleanSheet.ui.accessibility import (
-    render_skip_link,
-    set_page_main_content_id,
     announce_to_screen_reader,
     render_focus_visible_style,
+    render_skip_link,
+    set_page_main_content_id,
 )
 
 
@@ -73,18 +74,18 @@ def render_question(ws: Workspace) -> None:
     # Mode selector tabs
     mode_tabs = st.tabs([
         "🎯 Guided Analysis",
-        "🔍 Target Scan", 
+        "🔍 Target Scan",
         "✨ Autonomous Discovery"
     ])
-    
+
     with mode_tabs[0]:
         st.session_state.analysis_mode = AnalysisMode.GUIDED
         _render_guided_mode(ws, dataset_ref, column_roles, recipe, study_context)
-    
+
     with mode_tabs[1]:
         st.session_state.analysis_mode = AnalysisMode.TARGET_SCAN
         _render_target_scan_mode(ws, dataset_ref, column_roles, recipe, study_context)
-    
+
     with mode_tabs[2]:
         st.session_state.analysis_mode = AnalysisMode.AUTONOMOUS_DISCOVERY
         _render_discovery_mode(ws, dataset_ref, column_roles, recipe, study_context)
@@ -203,8 +204,6 @@ def _invalidate_pending_analysis() -> None:
 
 def _compute_config_hash(goal, variables, group_levels, contrast, study_design, confidence, alternative, missing_policy, nonfinite_policy, seed) -> str:
     """Compute a hash of the analysis configuration for change detection."""
-    import hashlib
-    import json
     config = {
         "goal": goal.value if goal else None,
         "variables": variables,
@@ -222,9 +221,6 @@ def _compute_config_hash(goal, variables, group_levels, contrast, study_design, 
 
 def _check_and_invalidate_config(goal, variables, group_levels, contrast, study_design, confidence, alternative, missing_policy, nonfinite_policy, seed) -> None:
     """Check if configuration changed and invalidate pending analysis if so."""
-    import hashlib
-    import json
-
     current_hash = _compute_config_hash(goal, variables, group_levels, contrast, study_design, confidence, alternative, missing_policy, nonfinite_policy, seed)
     last_hash = st.session_state.get("last_analysis_config_hash")
 
@@ -249,7 +245,6 @@ def _render_goal_config(
     study_context,
 ) -> None:
     """Render configuration for selected goal."""
-
     st.markdown(f"### Configure: {goal.value.replace('_', ' ').title()}")
 
     # Configuration form
@@ -288,7 +283,7 @@ def _render_goal_config(
 
         elif goal == Goal.COMPARE_PAIRED_MEANS:
             st.write("**Compare the same units measured twice**")
-            
+
             # Data format selector
             paired_format = st.radio(
                 "Data format:",
@@ -301,13 +296,13 @@ def _render_goal_config(
                 key="paired_format",
                 help="Long: Subject_ID | Timepoint | Value. Wide: Subject_ID | Pre_Value | Post_Value"
             )
-            
+
             variables["outcome"] = st.selectbox("Outcome (numeric)", numeric_cols, key="outcome_paired")
-            
+
             if paired_format == "long":
                 variables["pair_id"] = st.selectbox("Subject ID column", id_cols + categorical_cols, key="pair_id")
                 variables["occasion"] = st.selectbox("Occasion column", date_cols + datetime_cols + categorical_cols, key="occasion")
-                
+
                 if variables["occasion"] in df.columns:
                     occasions = df[variables["occasion"]].unique().to_list()
                     if len(occasions) >= 2:
@@ -538,18 +533,18 @@ def _render_target_scan_mode(ws: Workspace, dataset_ref, column_roles, recipe, s
     """Render the target outcome scan mode."""
     st.markdown("### 🔍 Find Drivers of a Target Variable")
     st.caption("Select a target outcome and CleanSheet will find the strongest predictors.")
-    
+
     role_map = {r.column: r.semantic_role.value for r in column_roles}
     continuous_cols = [c for c, r in role_map.items() if r in ("continuous", "discrete", "ordinal")]
     categorical_cols = [c for c, r in role_map.items() if r in ("nominal", "ordinal", "binary")]
-    
+
     target = st.selectbox(
         "Target variable (outcome)",
         continuous_cols + categorical_cols,
         key="target_scan_target",
         help="The variable you want to predict or explain"
     )
-    
+
     if target and st.button("Scan for Drivers", type="primary", use_container_width=True):
         with st.spinner("Scanning for validated drivers..."):
             candidates = run_autonomous_discovery(
@@ -559,18 +554,18 @@ def _render_target_scan_mode(ws: Workspace, dataset_ref, column_roles, recipe, s
                 recipe_steps=[s.model_dump() for s in recipe],
                 target_column=target,
             )
-        
+
         st.session_state.discovery_candidates = candidates
         st.session_state.target_scan_target = target
         st.rerun()
-    
+
     # Show results if available
     if "discovery_candidates" in st.session_state and st.session_state.get("target_scan_target") == target:
         candidates = st.session_state.discovery_candidates
         if candidates:
             st.success(f"✅ Found {len(candidates)} validated driver(s) for **{target}**")
             st.caption("Ranked by effect size, data quality, and FDR-adjusted significance — not raw p-values.")
-            
+
             for i, cand in enumerate(candidates):
                 _render_discovery_candidate_card(cand, i, target)
         else:
@@ -598,7 +593,7 @@ def _render_discovery_mode(ws: Workspace, dataset_ref, column_roles, recipe, stu
     - Prunes redundant findings (e.g., correlated predictors)
     - Only shows findings with **q < 0.05** and **practical effect sizes**
     """)
-    
+
     if st.button("🔍 Run Full Discovery Scan", type="primary", use_container_width=True):
         with st.spinner("Running autonomous discovery scan..."):
             candidates = run_autonomous_discovery(
@@ -607,17 +602,17 @@ def _render_discovery_mode(ws: Workspace, dataset_ref, column_roles, recipe, stu
                 column_roles=column_roles,
                 recipe_steps=[s.model_dump() for s in recipe],
             )
-        
+
         st.session_state.discovery_candidates = candidates
         st.rerun()
-    
+
     # Show results if available
     if "discovery_candidates" in st.session_state:
         candidates = st.session_state.discovery_candidates
         if candidates:
             st.success(f"✅ Discovery complete — {len(candidates)} validated pattern(s) found")
             st.caption("All findings are FDR-adjusted (q < 0.05) and have practical effect sizes.")
-            
+
             for i, cand in enumerate(candidates):
                 _render_discovery_candidate_card(cand, i)
         else:
@@ -635,22 +630,28 @@ def _render_discovery_candidate_card(cand: DiscoveryCandidate, index: int, targe
     """Render a single discovery candidate card."""
     with st.container(border=True):
         col1, col2, col3 = st.columns([3, 1, 1])
-        
+
         with col1:
             st.markdown(f"**{cand.question}**")
             if cand.raw_p_value is not None:
                 st.caption(f"Raw p = {cand.raw_p_value:.4f} → FDR q = {cand.q_value:.4f}")
             if cand.effect_size is not None:
                 st.caption(f"Effect: {cand.effect_size:.3f} ({cand.eligibility.suggested_method.value.replace('_', ' ').title() if cand.eligibility and cand.eligibility.suggested_method else 'N/A'})")
-        
+
         with col2:
             if cand.composite_score is not None:
                 st.metric("Score", f"{cand.composite_score:.0f}")
-        
+
         with col3:
             if st.button("Run Full Analysis", key=f"discovery_run_{index}", type="primary", use_container_width=True):
                 # Build analysis request from candidate
-                from CleanSheet.contracts import AnalysisRequest, Alternative, MissingPolicy, NonFinitePolicy, StudyDesign
+                from CleanSheet.contracts import (
+                    Alternative,
+                    AnalysisRequest,
+                    MissingPolicy,
+                    NonFinitePolicy,
+                    StudyDesign,
+                )
                 request = AnalysisRequest(
                     goal=cand.goal,
                     variables=cand.variables,

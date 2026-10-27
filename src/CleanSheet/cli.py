@@ -15,6 +15,7 @@ from CleanSheet.contracts import (
 )
 from CleanSheet.engine.execution import get_or_create_prepared
 from CleanSheet.jobs.workspace import Workspace
+from CleanSheet.services.ingest import ingest_file
 from CleanSheet.services.profile import run_profiling
 from CleanSheet.services.statistics import run_analysis
 
@@ -50,26 +51,29 @@ def replay_recipe(
         fmt = "parquet" if input_path.suffix.lower() in [".parquet", ".pq"] else "csv"
 
     import_spec = ImportSpec()
-    dataset_ref, preview, metadata = workspace.store_source(data, fmt, import_spec)
+    dataset_ref, preview, metadata = ingest_file(workspace, data, str(input_path), import_spec)
 
     print(f"Loaded dataset: {dataset_ref.dataset_id}")
     print(f"Rows: {dataset_ref.row_count:,}, Columns: {dataset_ref.column_count}")
 
     # Apply recipe to get prepared data
-    prepared_df = get_or_create_prepared(workspace, dataset_ref, [s.model_dump() for s in recipe])
+    prepared_df = get_or_create_prepared(workspace, dataset_ref, [s.model_dump(mode="json") for s in recipe])
     print(f"Prepared data: {prepared_df.height:,} rows × {prepared_df.width} cols")
 
     # Run analysis
     print(f"Running analysis: {analysis_request.goal.value}...")
     result = run_analysis(workspace, dataset_ref, analysis_request)
 
-    print(f"Analysis complete: {result.method.value}")
-    if result.estimate is not None:
-        print(f"  Estimate: {result.estimate:.4f}")
-    if result.interval:
-        print(f"  CI: [{result.interval[0]:.4f}, {result.interval[1]:.4f}]")
-    if result.p_value is not None:
-        print(f"  P-value: {result.p_value:.6f}")
+    # Get first statistical result for display
+    stat_result = result.statistical_results[0] if result.statistical_results else None
+    
+    print(f"Analysis complete: {stat_result.method.value if stat_result else 'N/A'}")
+    if stat_result and stat_result.estimate is not None:
+        print(f"  Estimate: {stat_result.estimate:.4f}")
+    if stat_result and stat_result.interval:
+        print(f"  CI: [{stat_result.interval[0]:.4f}, {stat_result.interval[1]:.4f}]")
+    if stat_result and stat_result.p_value is not None:
+        print(f"  P-value: {stat_result.p_value:.6f}")
 
     # Generate export
     output_dir.mkdir(parents=True, exist_ok=True)

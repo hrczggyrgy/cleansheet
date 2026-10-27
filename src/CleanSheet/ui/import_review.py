@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
-import io
 import polars as pl
 import streamlit as st
 
-from CleanSheet.contracts import ColumnRole, ImportSpec, JobStatus, PhysicalDtype, SemanticRole, StudyContext
-from CleanSheet.engine.semantic_typing import infer_column_roles, get_ambiguous_columns, confirm_column_role
+from CleanSheet.contracts import (
+    ColumnRole,
+    ImportSpec,
+    JobStatus,
+    PhysicalDtype,
+    SemanticRole,
+    StudyContext,
+)
+from CleanSheet.engine.semantic_typing import (
+    confirm_column_role,
+    get_ambiguous_columns,
+    infer_column_roles,
+)
 from CleanSheet.jobs.workspace import Workspace
 from CleanSheet.services.ingest import ingest_file
 from CleanSheet.ui.accessibility import (
-    render_skip_link,
-    set_page_main_content_id,
     announce_to_screen_reader,
     render_focus_visible_style,
+    render_skip_link,
+    set_page_main_content_id,
 )
 
 
@@ -307,7 +317,7 @@ def _render_semantic_type_confirmation(preview: pl.DataFrame) -> None:
             "Confirmed": "✅" if cr.confirmed else ("⚠️" if cr.column in ambiguous_cols else "✓"),
             "Excluded": "Yes" if cr.is_excluded else "No",
             "Missing %": f"{info.get('null_pct', 0):.1f}%",
-            "Unique": info.get('n_unique', 0),
+            "Unique": info.get("n_unique", 0),
         })
 
     if role_data:

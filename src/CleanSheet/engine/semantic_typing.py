@@ -13,7 +13,6 @@ import polars as pl
 
 from CleanSheet.contracts import ColumnRole, PhysicalDtype, SemanticRole
 
-
 # Known ordinal lexicons
 ORDINAL_LEXICONS: dict[str, list[str]] = {
     "likert_5": ["1", "2", "3", "4", "5"],
@@ -65,7 +64,7 @@ class TypeInferenceResult:
     """Result of semantic type inference for a column."""
 
     semantic_role: SemanticRole
-    confidence: Literal["high", "medium", "low"]
+    confidence: Literal[high, medium, low]
     ambiguity_reason: str | None
     ordinal_order: list[str] | None
     is_excluded: bool
@@ -135,7 +134,7 @@ def _check_sequential_integers(series: pl.Series) -> bool:
     if len(vals) < 3 or len(vals) > 10:
         return False
     # Check if it's 1, 2, 3... or 0, 1, 2...
-    if list(vals) == list(range(1, len(vals) + 1)) or list(vals) == list(range(0, len(vals))):
+    if list(vals) == list(range(1, len(vals) + 1)) or list(vals) == list(range(len(vals))):
         return True
     return False
 
@@ -316,7 +315,7 @@ def infer_semantic_role(series: pl.Series) -> TypeInferenceResult:
             return TypeInferenceResult(
                 semantic_role=SemanticRole.ORDINAL,
                 confidence="medium",
-                ambiguity_reason=f"Integers in Likert-like range — likely ordinal scale",
+                ambiguity_reason="Integers in Likert-like range — likely ordinal scale",
                 ordinal_order=[str(v) for v in sorted(unique_vals)],
                 is_excluded=False,
             )
@@ -333,14 +332,13 @@ def infer_semantic_role(series: pl.Series) -> TypeInferenceResult:
                     ordinal_order=None,
                     is_excluded=False,
                 )
-            else:
-                return TypeInferenceResult(
-                    semantic_role=SemanticRole.NOMINAL,
-                    confidence="medium",
-                    ambiguity_reason="Low cardinality integers with negatives — likely categorical codes",
-                    ordinal_order=None,
-                    is_excluded=False,
-                )
+            return TypeInferenceResult(
+                semantic_role=SemanticRole.NOMINAL,
+                confidence="medium",
+                ambiguity_reason="Low cardinality integers with negatives — likely categorical codes",
+                ordinal_order=None,
+                is_excluded=False,
+            )
 
         # Default: continuous
         return TypeInferenceResult(

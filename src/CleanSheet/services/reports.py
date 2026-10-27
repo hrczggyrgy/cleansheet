@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -54,7 +54,7 @@ def generate_markdown_report(
     lines.append("# CleanSheet Analysis Report")
     lines.append("")
     lines.append(f"**Run ID:** {result.run_id}")
-    lines.append(f"**Generated:** {datetime.now(timezone.utc).isoformat()}Z")
+    lines.append(f"**Generated:** {datetime.now(UTC).isoformat()}Z")
     lines.append(f"**Dataset:** {dataset_ref.dataset_id} ({dataset_ref.row_count:,} rows × {dataset_ref.column_count} cols)")
     lines.append(f"**Source Hash:** `{dataset_ref.source_sha256[:16]}`")
     lines.append("")
@@ -354,12 +354,12 @@ def generate_reproduction_script(
     """Generate a standalone Python script to reproduce the analysis."""
     script_lines = [
         "#!/usr/bin/env python3",
-        "\"\"\"",
-        f"CleanSheet Reproduction Script",
+        '"""',
+        "CleanSheet Reproduction Script",
         f"Run ID: {result.run_id}",
-        f"Generated: {datetime.now(timezone.utc).isoformat()}Z",
+        f"Generated: {datetime.now(UTC).isoformat()}Z",
         f"Source Data Hash: {dataset_ref.source_sha256}",
-        "\"\"\"",
+        '"""',
         "",
         "import json",
         "import hashlib",
@@ -373,8 +373,8 @@ def generate_reproduction_script(
         "# CONFIGURATION (extracted from CleanSheet run manifest)",
         "# ============================================================",
         "",
-        f"SOURCE_FILE = \"{{source_file}}\"  # Replace with path to your data file",
-        f"SOURCE_SHA256 = \"{dataset_ref.source_sha256}\"",
+        'SOURCE_FILE = "{source_file}"  # Replace with path to your data file',
+        f'SOURCE_SHA256 = "{dataset_ref.source_sha256}"',
         f"RECIPE = {json.dumps([r.model_dump() for r in recipe], indent=2, default=str)}",
         f"ANALYSIS_REQUEST = {analysis_request.model_dump_json(indent=2)}",
         f"COLUMN_ROLES = {json.dumps([r.model_dump() for r in column_roles], indent=2, default=str)}",
@@ -384,14 +384,14 @@ def generate_reproduction_script(
         "# ============================================================",
         "",
         "def load_and_verify_source(filepath: str) -> pl.DataFrame:",
-        "    \"\"\"Load source file and verify SHA-256 hash.\"\"\"",
+        '    """Load source file and verify SHA-256 hash."""',
         "    data = Path(filepath).read_bytes()",
         "    actual_sha256 = hashlib.sha256(data).hexdigest()",
-        f"    expected_sha256 = \"{dataset_ref.source_sha256}\"",
+        f'    expected_sha256 = "{dataset_ref.source_sha256}"',
         "    if actual_sha256 != expected_sha256:",
-        f"        raise ValueError(f\"Source file hash mismatch: expected {{expected_sha256}}, got {{actual_sha256}}\")",
+        '        raise ValueError(f"Source file hash mismatch: expected {expected_sha256}, got {actual_sha256}")',
         "    ",
-        f"    if filepath.suffix.lower() in ['.parquet', '.pq']:",
+        "    if filepath.suffix.lower() in ['.parquet', '.pq']:",
         "        df = pl.read_parquet(filepath)",
         "    else:",
         "        df = pl.read_csv(filepath)",
@@ -402,7 +402,7 @@ def generate_reproduction_script(
         "# ============================================================",
         "",
         "def apply_recipe(df: pl.DataFrame, recipe: list) -> pl.DataFrame:",
-        "    \"\"\"Apply cleaning recipe steps to DataFrame.\"\"\"",
+        '    """Apply cleaning recipe steps to DataFrame."""',
         "    for step in recipe:",
         "        op = step.get('operation')",
         "        args = step.get('arguments', {})",
@@ -413,7 +413,7 @@ def generate_reproduction_script(
         "        elif op == 'filter':",
         "            expr_str = args.get('expression')",
         "            if expr_str:",
-        "                df = df.filter(eval(expr_str, {\"pl\": pl}))",
+        '                df = df.filter(eval(expr_str, {"pl": pl}))',
         "        elif op == 'cast':",
         "            casts = args.get('casts', {})",
         "            for col, dtype_str in casts.items():",
@@ -460,9 +460,9 @@ def generate_reproduction_script(
         "    group_col = vars_['group']",
         "    ",
         "    # Determine contrast order",
-        "    if contrast and contrast.endswith(f\"_minus_{{levels[1]}}\") and contrast.startswith(f\"{{levels[0]}}_\"):",
+        '    if contrast and contrast.endswith(f"_minus_{{levels[1]}}") and contrast.startswith(f"{{levels[0]}}_"):',
         "        first, second = levels[0], levels[1]",
-        "    elif contrast and contrast.endswith(f\"_minus_{{levels[0]}}\") and contrast.startswith(f\"{{levels[1]}}_\"):",
+        '    elif contrast and contrast.endswith(f"_minus_{{levels[0]}}") and contrast.startswith(f"{{levels[1]}}_"):',
         "        first, second = levels[1], levels[0]",
         "    else:",
         "        first, second = levels[0], levels[1]",
@@ -542,22 +542,22 @@ def generate_reproduction_script(
         "# MAIN EXECUTION",
         "# ============================================================",
         "",
-        "if __name__ == \"__main__\":",
+        'if __name__ == "__main__":',
         "    import sys",
         "    ",
         "    if len(sys.argv) < 2:",
-        "        print(f\"Usage: {{sys.argv[0]}} <source_file>\")",
+        '        print(f"Usage: {{sys.argv[0]}} <source_file>")',
         "        sys.exit(1)",
         "    ",
         "    source_file = sys.argv[1]",
         "    ",
-        "    print(f\"Loading data from {{source_file}}...\")",
+        '    print(f"Loading data from {{source_file}}...")',
         "    df = load_and_verify_source(source_file)",
-        "    print(f\"Loaded {{df.height}} rows × {{df.width}} columns\")",
+        '    print(f"Loaded {{df.height}} rows × {{df.width}} columns")',
         "    ",
-        "    print(\"Applying cleaning recipe...\")",
+        '    print("Applying cleaning recipe...")',
         "    df = apply_recipe(df, RECIPE)",
-        "    print(f\"Prepared data: {{df.height}} rows × {{df.width}} columns\")",
+        '    print(f"Prepared data: {{df.height}} rows × {{df.width}} columns")',
         "    ",
         "    print(f\"Running analysis: {{ANALYSIS_REQUEST['goal']}}...\")",
         "    ",
@@ -566,16 +566,16 @@ def generate_reproduction_script(
         "        if method == 'welch_t':",
         "            res = run_welch_t(df, ANALYSIS_REQUEST)",
         "        elif method == 'mann_whitney_u':",
-        "            print(\"Mann-Whitney U not yet implemented in reproduction script\")",
+        '            print("Mann-Whitney U not yet implemented in reproduction script")',
         "            sys.exit(1)",
         "        else:",
-        "            print(f\"Unknown method: {{method}}\")",
+        '            print(f"Unknown method: {{method}}")',
         "            sys.exit(1)",
         "    else:",
         "        print(f\"Goal {{ANALYSIS_REQUEST['goal']}} not yet implemented in reproduction script\")",
         "        sys.exit(1)",
         "    ",
-        "    print(f\"\\nResults:\")",
+        '    print(f"\\nResults:")',
         "    print(f\"  Estimate: {{res['estimate']:.4f}}\")",
         "    print(f\"  95% CI: [{{res['ci'][0]:.4f}}, {{res['ci'][1]:.4f}}]\")",
         "    print(f\"  t({{res['df']:.1f}}) = {{res['statistic']:.4f}}, p = {{res['p_value']:.6f}}\")",
@@ -604,11 +604,11 @@ def generate_reproduction_script(
         "        if key in original and original[key] is not None:",
         "            diff = abs(res[key] - original[key])",
         "            if diff > tolerance:",
-        "                print(f\"⚠️  MISMATCH in {{key}}: reproduced={{res[key]}}, original={{original[key]}} (diff={{diff}})\")",
+        '                print(f"⚠️  MISMATCH in {{key}}: reproduced={{res[key]}}, original={{original[key]}} (diff={{diff}})")',
         "            else:",
-        "                print(f\"✅ {{key}} matches (diff={{diff:.2e}})\")",
+        '                print(f"✅ {{key}} matches (diff={{diff:.2e}})")',
         "    ",
-        "    print(\"\\nReproduction complete!\")",
+        '    print("\\nReproduction complete!")',
         "",
     ]
     return "\n".join(script_lines)
@@ -643,8 +643,8 @@ def generate_run_manifest(
         dependency_versions=settings.get_dependency_versions() if hasattr(settings, "get_dependency_versions") else {},
         seeds={"analysis": analysis_request.seed, "plotting": 42},
         timestamps={
-            "started": datetime.now(timezone.utc).isoformat(),
-            "completed": datetime.now(timezone.utc).isoformat(),
+            "started": datetime.now(UTC).isoformat(),
+            "completed": datetime.now(UTC).isoformat(),
         },
         resource_limits=settings.get_resource_limits() if hasattr(settings, "get_resource_limits") else {},
         outcomes={

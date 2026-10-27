@@ -7,7 +7,6 @@ following the statistical policy from the blueprint.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import polars as pl
@@ -22,8 +21,6 @@ from CleanSheet.contracts import (
     SemanticRole,
     StudyDesign,
 )
-from CleanSheet.config import get_settings
-
 
 # Thresholds from statistical policy
 SKEWNESS_THRESHOLD = 1.5
@@ -85,12 +82,12 @@ def check_group_sizes(ctx: DiagnosticContext) -> AssumptionCheck:
             severity="error" if not passed else "info",
         )
 
-    elif goal == Goal.COMPARE_PAIRED_MEANS:
+    if goal == Goal.COMPARE_PAIRED_MEANS:
         # Check if wide format (pre/post columns)
         if "pre_col" in ctx.request.variables and "post_col" in ctx.request.variables:
             pre_col = ctx.request.variables["pre_col"]
             post_col = ctx.request.variables["post_col"]
-            
+
             finite = ctx.df.filter(
                 pl.col(pre_col).is_not_null() &
                 pl.col(post_col).is_not_null() &
@@ -99,7 +96,7 @@ def check_group_sizes(ctx: DiagnosticContext) -> AssumptionCheck:
                 ~pl.col(pre_col).is_nan() &
                 ~pl.col(post_col).is_nan()
             )
-            
+
             n_pairs = finite.height
             passed = n_pairs >= MIN_GROUP_SIZE_PAIRED
             return AssumptionCheck(
@@ -114,7 +111,7 @@ def check_group_sizes(ctx: DiagnosticContext) -> AssumptionCheck:
                 ),
                 severity="error" if not passed else "info",
             )
-        
+
         # Long format
         pair_col = ctx.request.variables["pair_id"]
         outcome_col = ctx.request.variables["outcome"]
@@ -137,7 +134,7 @@ def check_group_sizes(ctx: DiagnosticContext) -> AssumptionCheck:
             severity="error" if not passed else "info",
         )
 
-    elif goal in (Goal.EXPLORE_LINEAR_RELATIONSHIP, Goal.EXPLORE_ORDERED_RELATIONSHIP):
+    if goal in (Goal.EXPLORE_LINEAR_RELATIONSHIP, Goal.EXPLORE_ORDERED_RELATIONSHIP):
         x_col = ctx.request.variables["outcome"]
         y_col = ctx.request.variables["predictor"]
 
@@ -165,7 +162,7 @@ def check_group_sizes(ctx: DiagnosticContext) -> AssumptionCheck:
             severity="error" if not passed else "info",
         )
 
-    elif goal in (Goal.CATEGORICAL_ASSOCIATION, Goal.SPARSE_2X2_TABLE):
+    if goal in (Goal.CATEGORICAL_ASSOCIATION, Goal.SPARSE_2X2_TABLE):
         x_col = ctx.request.variables["outcome"]
         y_col = ctx.request.variables["group"]
 
@@ -231,7 +228,7 @@ def check_skewness(ctx: DiagnosticContext) -> AssumptionCheck:
         if "pre_col" in ctx.request.variables and "post_col" in ctx.request.variables:
             pre_col = ctx.request.variables["pre_col"]
             post_col = ctx.request.variables["post_col"]
-            
+
             finite = ctx.df.filter(
                 pl.col(pre_col).is_not_null() &
                 pl.col(post_col).is_not_null() &
@@ -240,11 +237,11 @@ def check_skewness(ctx: DiagnosticContext) -> AssumptionCheck:
                 ~pl.col(pre_col).is_nan() &
                 ~pl.col(post_col).is_nan()
             )
-            
+
             if finite.height >= 3:
                 diff = finite[post_col] - finite[pre_col]
                 skew = float(diff.skew())
-                
+
                 passed = abs(skew) <= SKEWNESS_THRESHOLD
                 return AssumptionCheck(
                     name="skewness_differences",
@@ -365,12 +362,12 @@ def check_outliers(ctx: DiagnosticContext) -> AssumptionCheck:
             severity="warning" if not passed else "info",
         )
 
-    elif goal == Goal.COMPARE_PAIRED_MEANS:
+    if goal == Goal.COMPARE_PAIRED_MEANS:
         # Wide format
         if "pre_col" in ctx.request.variables and "post_col" in ctx.request.variables:
             pre_col = ctx.request.variables["pre_col"]
             post_col = ctx.request.variables["post_col"]
-            
+
             finite = ctx.df.filter(
                 pl.col(pre_col).is_not_null() &
                 pl.col(post_col).is_not_null() &
@@ -379,7 +376,7 @@ def check_outliers(ctx: DiagnosticContext) -> AssumptionCheck:
                 ~pl.col(pre_col).is_nan() &
                 ~pl.col(post_col).is_nan()
             )
-            
+
             if finite.height >= 10:
                 diff = finite[post_col] - finite[pre_col]
                 vals = diff.to_numpy()
@@ -388,13 +385,13 @@ def check_outliers(ctx: DiagnosticContext) -> AssumptionCheck:
         else:
             # Long format
             outcome_col = ctx.request.variables["outcome"]
-            
+
             finite = ctx.df.filter(
                 pl.col(outcome_col).is_not_null() &
                 ~pl.col(outcome_col).is_infinite() &
                 ~pl.col(outcome_col).is_nan()
             )
-            
+
             if finite.height < 10:
                 return AssumptionCheck(
                     name="outliers",
@@ -402,7 +399,7 @@ def check_outliers(ctx: DiagnosticContext) -> AssumptionCheck:
                     message="Insufficient data for outlier check",
                     severity="info",
                 )
-            
+
             vals = finite[outcome_col].to_numpy()
 
         q1 = np.percentile(vals, 25)
@@ -521,7 +518,7 @@ def check_normality(ctx: DiagnosticContext) -> AssumptionCheck:
             severity="info",
         )
 
-    elif goal == Goal.COMPARE_PAIRED_MEANS:
+    if goal == Goal.COMPARE_PAIRED_MEANS:
         outcome_col = ctx.request.variables["outcome"]
         pair_col = ctx.request.variables["pair_id"]
         occasion_col = ctx.request.variables["occasion"]
@@ -746,9 +743,7 @@ def _determine_method_routing(request: AnalysisRequest, checks: list[AssumptionC
 
     # Also check study design mismatch
     design_mismatch = False
-    if goal == Goal.COMPARE_TWO_MEANS and study_design != StudyDesign.INDEPENDENT:
-        design_mismatch = True
-    elif goal == Goal.COMPARE_PAIRED_MEANS and study_design != StudyDesign.PAIRED:
+    if (goal == Goal.COMPARE_TWO_MEANS and study_design != StudyDesign.INDEPENDENT) or (goal == Goal.COMPARE_PAIRED_MEANS and study_design != StudyDesign.PAIRED):
         design_mismatch = True
 
     if assumption_failures or design_mismatch:

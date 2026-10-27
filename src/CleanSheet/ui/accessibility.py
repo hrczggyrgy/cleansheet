@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import streamlit as st
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
+
+import streamlit as st
 
 
 def render_skip_link() -> None:
@@ -150,7 +151,7 @@ def accessible_button(
         aria_attrs["aria-describedby"] = f"{key}-help"
     if disabled:
         aria_attrs["aria-disabled"] = "true"
-    
+
     # Render button with help text
     clicked = st.button(
         label,
@@ -160,14 +161,14 @@ def accessible_button(
         type="primary" if primary else "secondary",
         **kwargs,
     )
-    
+
     # Render help text with proper ID for aria-describedby
     if help_text and not disabled:
         st.markdown(
             f'<span id="{key}-help" class="sr-only">{help_text}</span>',
             unsafe_allow_html=True,
         )
-    
+
     return clicked
 
 
@@ -188,13 +189,13 @@ def accessible_selectbox(
         disabled=disabled,
         **kwargs,
     )
-    
+
     if help_text:
         st.markdown(
             f'<span id="{key}-help" class="sr-only">{help_text}</span>',
             unsafe_allow_html=True,
         )
-    
+
     return selected
 
 
@@ -213,13 +214,13 @@ def accessible_text_input(
         disabled=disabled,
         **kwargs,
     )
-    
+
     if help_text:
         st.markdown(
             f'<span id="{key}-help" class="sr-only">{help_text}</span>',
             unsafe_allow_html=True,
         )
-    
+
     return value
 
 
@@ -233,7 +234,7 @@ def render_progress_with_announcement(
     """Render a progress bar with screen reader announcement."""
     progress = current / total if total > 0 else 0
     st.progress(progress, text=f"{label}: {current}/{total} - {message}")
-    
+
     # Announce to screen readers
     announce_to_screen_reader(
         f"{label}: {current} of {total} complete. {message}",

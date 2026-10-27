@@ -10,7 +10,6 @@ from CleanSheet.contracts import (
     Alternative,
     AnalysisRequest,
     Goal,
-    IntervalMethod,
     JobStatus,
     MissingPolicy,
     NonFinitePolicy,
@@ -25,10 +24,10 @@ from CleanSheet.services.visualize import (
     generate_plots,
 )
 from CleanSheet.ui.accessibility import (
-    render_skip_link,
-    set_page_main_content_id,
     announce_to_screen_reader,
     render_focus_visible_style,
+    render_skip_link,
+    set_page_main_content_id,
 )
 
 
@@ -597,23 +596,21 @@ def _run_confounder_check(stat_result, plan, index: int, ws, dataset_ref, recipe
     1. Are associated with both X and Y
     2. When stratified by, change the direction or magnitude of the X-Y relationship
     """
-    from CleanSheet.services.statistics import run_analysis
+    from CleanSheet.contracts import Goal
     from CleanSheet.engine.execution import LazyExecutor
-    from CleanSheet.contracts import Goal, StudyDesign, Alternative, MissingPolicy, NonFinitePolicy
-    import numpy as np
-    
+
     st.markdown("---")
     st.markdown("### 🔍 Confounder / Simpson's Paradox Check")
     st.caption("Testing whether a third variable explains or reverses the observed relationship...")
-    
+
     # Get variables from the analysis
     goal = plan.goal
     vars_ = plan.variables
-    
+
     if goal not in (Goal.COMPARE_TWO_MEANS, Goal.COMPARE_K_MEANS, Goal.EXPLORE_LINEAR_RELATIONSHIP, Goal.EXPLORE_ORDERED_RELATIONSHIP):
         st.info("Confounder check available for group comparisons and correlation analyses.")
         return
-    
+
     # Identify X and Y
     if goal in (Goal.COMPARE_TWO_MEANS, Goal.COMPARE_K_MEANS):
         x_var = vars_.get("group")      # Predictor (categorical)
@@ -625,79 +622,78 @@ def _run_confounder_check(stat_result, plan, index: int, ws, dataset_ref, recipe
         y_var = vars_.get("predictor")  # Y
         x_type = "numeric"
         y_type = "numeric"
-    
+
     if not x_var or not y_var:
         st.warning("Cannot identify variables for confounder check.")
         return
-    
+
     # Load full data
     executor = LazyExecutor(ws, dataset_ref)
     df = get_or_create_prepared(ws, dataset_ref, [s.model_dump() for s in recipe]) if recipe else executor.preview(10000)
-    
+
     # Find candidate confounders: categorical variables associated with both X and Y
     candidate_confounders = []
-    
+
     for cr in column_roles:
         z_var = cr.column
         if z_var in [x_var, y_var]:
             continue
         if z_var not in df.columns:
             continue
-        
+
         z_role = cr.semantic_role
         if z_role.value not in ("nominal", "ordinal", "binary"):
             continue
-        
+
         # Check if Z is associated with X
         x_assoc_p = _test_association(df, z_var, x_var)
         if x_assoc_p is None or x_assoc_p >= 0.1:
             continue
-        
+
         # Check if Z is associated with Y
         y_assoc_p = _test_association(df, z_var, y_var)
         if y_assoc_p is None or y_assoc_p >= 0.1:
             continue
-        
+
         candidate_confounders.append({
             "variable": z_var,
             "x_assoc_p": x_assoc_p,
             "y_assoc_p": y_assoc_p,
             "n_levels": df[z_var].n_unique(),
         })
-    
+
     if not candidate_confounders:
         st.success("✅ **No confounders detected**: No third variable in your data is associated with both X and Y at p < 0.1.")
         return
-    
+
     # Sort by combined association strength
     candidate_confounders.sort(key=lambda c: c["x_assoc_p"] * c["y_assoc_p"])
-    
+
     st.markdown(f"**Found {len(candidate_confounders)} potential confounder(s):**")
-    
+
     for conf in candidate_confounders[:3]:  # Top 3
         with st.container(border=True):
             st.markdown(f"**Potential Confounder: `{conf['variable']}`** ({conf['n_levels']} levels)")
             st.caption(f"Association with X: p = {conf['x_assoc_p']:.4f} | Association with Y: p = {conf['y_assoc_p']:.4f}")
-            
+
             if st.button(f"🔍 Stratify by `{conf['variable']}`", key=f"stratify_{index}_{conf['variable']}", type="primary"):
-                _run_stratified_analysis(plan, x_var, y_var, conf['variable'], ws, dataset_ref, recipe, column_roles)
+                _run_stratified_analysis(plan, x_var, y_var, conf["variable"], ws, dataset_ref, recipe, column_roles)
 
 
 def _test_association(df: pl.DataFrame, var1: str, var2: str) -> float | None:
     """Test association between two variables, return p-value."""
     from scipy import stats
-    import numpy as np
-    
+
     if var1 not in df.columns or var2 not in df.columns:
         return None
-    
+
     # Determine types
     s1 = df[var1]
     s2 = df[var2]
-    
+
     is_cat1 = s1.dtype in (pl.String, pl.Categorical) or s1.n_unique() / len(s1) < 0.05
     is_cat2 = s2.dtype in (pl.String, pl.Categorical) or s2.n_unique() / len(s2) < 0.05
-    
+
     try:
         if is_cat1 and is_cat2:
             # Chi-square
@@ -712,7 +708,7 @@ def _test_association(df: pl.DataFrame, var1: str, var2: str) -> float | None:
                 return None
             _, p, _, _ = stats.chi2_contingency(observed, correction=False)
             return p
-        elif is_cat1 and not is_cat2:
+        if is_cat1 and not is_cat2:
             # ANOVA / Kruskal-Wallis
             clean = df.select(var1, var2).drop_nulls()
             if clean.height < 5:
@@ -723,58 +719,57 @@ def _test_association(df: pl.DataFrame, var1: str, var2: str) -> float | None:
                 return None
             _, p = stats.f_oneway(*groups)
             return p
-        elif not is_cat1 and is_cat2:
+        if not is_cat1 and is_cat2:
             # ANOVA / Kruskal-Wallis (reversed)
             return _test_association(df, var2, var1)
-        else:
-            # Correlation
-            clean = df.select(var1, var2).drop_nulls()
-            clean = clean.filter(
-                ~pl.col(var1).is_infinite() & ~pl.col(var1).is_nan() &
-                ~pl.col(var2).is_infinite() & ~pl.col(var2).is_nan()
-            )
-            if clean.height < 5:
-                return None
-            x = clean[var1].to_numpy()
-            y = clean[var2].to_numpy()
-            _, p = stats.pearsonr(x, y)
-            return p
+        # Correlation
+        clean = df.select(var1, var2).drop_nulls()
+        clean = clean.filter(
+            ~pl.col(var1).is_infinite() & ~pl.col(var1).is_nan() &
+            ~pl.col(var2).is_infinite() & ~pl.col(var2).is_nan()
+        )
+        if clean.height < 5:
+            return None
+        x = clean[var1].to_numpy()
+        y = clean[var2].to_numpy()
+        _, p = stats.pearsonr(x, y)
+        return p
     except Exception:
         return None
 
 
 def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, dataset_ref, recipe, column_roles) -> None:
     """Run the original analysis stratified by Z and show results."""
-    from CleanSheet.services.statistics import run_analysis
-    from CleanSheet.contracts import Goal, StudyDesign, Alternative, MissingPolicy, NonFinitePolicy
+    from CleanSheet.contracts import Goal
     from CleanSheet.engine.execution import LazyExecutor
-    
+    from CleanSheet.services.statistics import run_analysis
+
     st.markdown("---")
     st.markdown(f"### 📊 Stratified Analysis by `{z_var}`")
-    
+
     executor = LazyExecutor(ws, dataset_ref)
     df = get_or_create_prepared(ws, dataset_ref, [s.model_dump() for s in recipe]) if recipe else executor.preview(10000)
-    
+
     if z_var not in df.columns:
         st.warning(f"Stratification variable `{z_var}` not found in data.")
         return
-    
+
     levels = df[z_var].unique().to_list()
     if len(levels) > 6:
         st.warning(f"Too many levels ({len(levels)}) in `{z_var}` for stratified display. Consider grouping rare levels.")
         levels = levels[:6]
-    
+
     goal = plan.goal
-    
+
     strata_results = []
-    
+
     for level in levels:
         stratum_df = df.filter(pl.col(z_var) == level)
-        
+
         if len(stratum_df) < 5:
             st.caption(f"Skipping `{level}` (n={len(stratum_df)} < 5)")
             continue
-        
+
         # Build request for this stratum
         if goal in (Goal.COMPARE_TWO_MEANS, Goal.COMPARE_K_MEANS):
             request = AnalysisRequest(
@@ -803,7 +798,7 @@ def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, datas
                 confidence_level=0.95,
                 seed=42,
             )
-        
+
         try:
             result = run_analysis(ws, dataset_ref, request, None, column_roles)
             if result.statistical_results:
@@ -818,14 +813,14 @@ def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, datas
                 })
         except Exception as e:
             st.caption(f"Stratum `{level}` failed: {e}")
-    
+
     if not strata_results:
         st.warning("No valid strata produced results.")
         return
-    
+
     # Display results table
     st.markdown("**Stratum-Specific Results:**")
-    
+
     import pandas as pd
     display_df = pd.DataFrame([{
         f"`{z_var}` Level": r["level"],
@@ -836,7 +831,7 @@ def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, datas
         "Effect Size": f"{r['effect_size']:.4f}" if r["effect_size"] is not None else "N/A",
     } for r in strata_results])
     st.dataframe(display_df, hide_index=True, use_container_width=True)
-    
+
     # Check for Simpson's Paradox
     _check_simpsons_paradox(strata_results, plan, x_var, y_var, z_var)
 
@@ -849,14 +844,14 @@ def _check_simpsons_paradox(strata_results, plan, x_var, y_var, z_var):
         if stat.estimate is not None:
             overall_estimate = stat.estimate
             break
-    
+
     if overall_estimate is None:
         return
-    
+
     overall_sign = 1 if overall_estimate > 0 else (-1 if overall_estimate < 0 else 0)
     if overall_sign == 0:
         return
-    
+
     # Check stratum signs
     stratum_signs = []
     for r in strata_results:
@@ -864,10 +859,10 @@ def _check_simpsons_paradox(strata_results, plan, x_var, y_var, z_var):
             s = 1 if r["estimate"] > 0 else (-1 if r["estimate"] < 0 else 0)
             if s != 0:
                 stratum_signs.append(s)
-    
+
     if not stratum_signs:
         return
-    
+
     # Simpson's paradox: all strata have opposite sign to overall
     opposite_signs = sum(1 for s in stratum_signs if s != overall_sign)
     if opposite_signs == len(stratum_signs) and len(stratum_signs) > 1:
@@ -883,11 +878,11 @@ def _run_subgroup_analysis(stat_result, plan, index: int, ws, dataset_ref, recip
     st.markdown("---")
     st.markdown("### 📈 Subgroup Analysis")
     st.caption("Select a variable to test whether the effect varies across its levels.")
-    
+
     # Get available stratification variables
     executor = LazyExecutor(ws, dataset_ref)
     df = get_or_create_prepared(ws, dataset_ref, [s.model_dump() for s in recipe]) if recipe else executor.preview(10000)
-    
+
     # Categorical variables only
     strat_vars = []
     for cr in column_roles:
@@ -896,18 +891,18 @@ def _run_subgroup_analysis(stat_result, plan, index: int, ws, dataset_ref, recip
                 n_levels = df[cr.column].n_unique()
                 if 2 <= n_levels <= 10:
                     strat_vars.append((cr.column, n_levels))
-    
+
     if not strat_vars:
         st.info("No suitable categorical variables for subgroup analysis (need 2-10 levels).")
         return
-    
+
     selected = st.selectbox(
         "Stratify by:",
         options=[v[0] for v in strat_vars],
         format_func=lambda x: f"{x} ({dict(strat_vars)[x]} levels)",
         key=f"subgroup_var_{index}",
     )
-    
+
     if st.button(f"Run Subgroup Analysis by `{selected}`", key=f"run_subgroup_{index}", type="primary"):
         # Determine X and Y
         goal = plan.goal
@@ -917,64 +912,63 @@ def _run_subgroup_analysis(stat_result, plan, index: int, ws, dataset_ref, recip
         else:
             x_var = plan.variables.get("outcome")
             y_var = plan.variables.get("predictor")
-        
+
         _run_stratified_analysis(plan, x_var, y_var, selected, ws, dataset_ref, recipe, column_roles)
 
 
 def _run_sensitivity_analysis(stat_result, plan, index: int, ws, dataset_ref, recipe, column_roles) -> None:
     """Run sensitivity analysis excluding outliers and show comparison."""
-    from CleanSheet.services.statistics import run_analysis
     from CleanSheet.engine.execution import LazyExecutor
-    import numpy as np
-    
+    from CleanSheet.services.statistics import run_analysis
+
     # Check if outliers were flagged
     outlier_check = stat_result.assumption_checks.get("outliers", {})
     if outlier_check.get("passed") is not False:
         st.info("No outliers were flagged in the original analysis.")
         return
-    
+
     # Get the outcome variable and find outlier bounds
     outcome_col = plan.variables.get("outcome")
     if not outcome_col:
         st.warning("Cannot determine outcome variable for sensitivity analysis.")
         return
-    
+
     # Load data to compute outlier bounds
     executor = LazyExecutor(ws, dataset_ref)
     df = get_or_create_prepared(ws, dataset_ref, [s.model_dump() for s in recipe]) if recipe else executor.preview(10000)
-    
+
     if outcome_col not in df.columns:
         st.warning(f"Outcome column '{outcome_col}' not found in data.")
         return
-    
+
     # Compute IQR bounds
     finite = df.filter(
         pl.col(outcome_col).is_not_null() &
         ~pl.col(outcome_col).is_infinite() &
         ~pl.col(outcome_col).is_nan()
     )
-    
+
     if len(finite) < 10:
         st.warning("Insufficient data for sensitivity analysis.")
         return
-    
+
     vals = finite[outcome_col].to_numpy()
     q1 = np.percentile(vals, 25)
     q3 = np.percentile(vals, 75)
     iqr = q3 - q1
     lower = q1 - 3 * iqr
     upper = q3 + 3 * iqr
-    
+
     # Filter outliers
     df_no_outliers = finite.filter(
         (pl.col(outcome_col) >= lower) & (pl.col(outcome_col) <= upper)
     )
-    
+
     n_removed = len(finite) - len(df_no_outliers)
     if n_removed == 0:
         st.info("No outliers to remove.")
         return
-    
+
     # Store outlier bounds for use in filtered analysis
     st.session_state[f"sensitivity_bounds_{index}"] = {
         "outcome_col": outcome_col,
@@ -982,7 +976,7 @@ def _run_sensitivity_analysis(stat_result, plan, index: int, ws, dataset_ref, re
         "upper": float(upper),
         "n_removed": n_removed,
     }
-    
+
     # Run analysis on filtered data
     with st.spinner("Running sensitivity analysis..."):
         try:
@@ -1001,13 +995,13 @@ def _run_sensitivity_analysis(stat_result, plan, index: int, ws, dataset_ref, re
                 "timestamp": "2026-10-27T00:00:00",
                 "reversible": True,
             }]
-            
+
             filtered_result = run_analysis(
-                ws, dataset_ref, plan, 
+                ws, dataset_ref, plan,
                 [s.model_dump() for s in filter_recipe],
                 column_roles
             )
-            
+
             if filtered_result.statistical_results:
                 filtered_stat = filtered_result.statistical_results[0]
                 _render_sensitivity_comparison(stat_result, filtered_stat, plan, n_removed, lower, upper)
@@ -1022,9 +1016,9 @@ def _render_sensitivity_comparison(original_stat, filtered_stat, plan, n_removed
     st.markdown("---")
     st.markdown(f"### 🧪 Sensitivity Analysis: Excluding {n_removed} Outlier(s)")
     st.caption(f"Outliers defined as values outside [{lower:.2f}, {upper:.2f}] (3×IQR)")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.markdown("**Original (with outliers)**")
         if original_stat.estimate is not None:
@@ -1036,7 +1030,7 @@ def _render_sensitivity_comparison(original_stat, filtered_stat, plan, n_removed
             st.metric("P-value", p_text)
         if original_stat.effect_size is not None:
             st.metric("Effect Size", f"{original_stat.effect_size:.4f} ({original_stat.effect_size_interpretation})")
-    
+
     with col2:
         st.markdown("**Filtered (outliers excluded)**")
         if filtered_stat.estimate is not None:
@@ -1051,7 +1045,7 @@ def _render_sensitivity_comparison(original_stat, filtered_stat, plan, n_removed
         if filtered_stat.effect_size is not None:
             delta_es = filtered_stat.effect_size - original_stat.effect_size if original_stat.effect_size else 0
             st.metric("Effect Size", f"{filtered_stat.effect_size:.4f} ({filtered_stat.effect_size_interpretation})", delta=f"{delta_es:+.4f}")
-    
+
     # Determine robustness
     conclusion_changed = False
     if original_stat.p_value is not None and filtered_stat.p_value is not None:
@@ -1059,7 +1053,7 @@ def _render_sensitivity_comparison(original_stat, filtered_stat, plan, n_removed
         filt_sig = filtered_stat.p_value < 0.05
         if orig_sig != filt_sig:
             conclusion_changed = True
-    
+
     if conclusion_changed:
         st.error("⚠️ **Conclusion Changed**: The statistical significance differs when outliers are excluded. Results may not be robust.")
     else:
@@ -1076,14 +1070,13 @@ def _interpret_strength(r: float) -> str:
     """Interpret correlation strength."""
     if r < 0.1:
         return "negligible"
-    elif r < 0.3:
+    if r < 0.3:
         return "weak"
-    elif r < 0.5:
+    if r < 0.5:
         return "moderate"
-    elif r < 0.7:
+    if r < 0.7:
         return "strong"
-    else:
-        return "very strong"
+    return "very strong"
 
 
 def _get_n_included(stat_result, plan) -> int:
@@ -1093,16 +1086,13 @@ def _get_n_included(stat_result, plan) -> int:
 
     if method == "welch_t":
         return sum(counts.values())
-    elif method == "paired_t":
+    if method == "paired_t":
         return counts.get("pairs", sum(counts.values()))
-    elif method in ("pearson_r", "spearman_rho"):
+    if method in ("pearson_r", "spearman_rho") or method in ("chi2_independence", "fisher_exact"):
         return counts.get("n", sum(counts.values()))
-    elif method in ("chi2_independence", "fisher_exact"):
-        return counts.get("n", sum(counts.values()))
-    elif method == "descriptive":
+    if method == "descriptive":
         return counts.get("n_rows", sum(counts.values()))
-    else:
-        return sum(counts.values())
+    return sum(counts.values())
 
 
 def _generate_result_plots(
@@ -1194,11 +1184,11 @@ def _render_plots(plots) -> None:
     for plot in plots:
         # Render the chart
         st.image(
-            plot.png_bytes, 
-            caption=f"{plot.spec.plot_type.value.replace('_', ' ').title()}", 
+            plot.png_bytes,
+            caption=f"{plot.spec.plot_type.value.replace('_', ' ').title()}",
             width="stretch"
         )
-        
+
         # Download button
         col1, col2 = st.columns([1, 3])
         with col1:
@@ -1209,7 +1199,7 @@ def _render_plots(plots) -> None:
                 mime="image/png",
                 key=f"dl_{id(plot)}",
             )
-        
+
         # Accessible data table fallback
         _render_accessible_plot_table(plot)
 
@@ -1223,15 +1213,15 @@ def _render_accessible_plot_table(plot) -> None:
     # Generate summary data from the plot specification
     spec = plot.spec
     vars_map = spec.variables
-    
+
     with st.expander("📋 View Chart Data as Accessible Table", expanded=False):
         st.markdown(f"**Chart Type:** {spec.plot_type.value.replace('_', ' ').title()}")
         st.markdown(f"**Variables:** {', '.join(f'{k}={v}' for k, v in vars_map.items() if v)}")
-        
+
         # Generate a descriptive text summary
         summary = _generate_plot_text_summary(plot)
         st.markdown(f"**Description:** {summary}")
-        
+
         # Provide downloadable CSV of the underlying data
         csv_data = _generate_plot_csv(plot)
         if csv_data:
@@ -1249,20 +1239,20 @@ def _generate_plot_text_summary(plot) -> str:
     spec = plot.spec
     vars_map = spec.variables
     plot_type = spec.plot_type.value
-    
+
     # Build context
     parts = []
-    if "x" in vars_map and vars_map["x"]:
+    if vars_map.get("x"):
         parts.append(f"X-axis: {vars_map['x']}")
-    if "y" in vars_map and vars_map["y"]:
+    if vars_map.get("y"):
         parts.append(f"Y-axis: {vars_map['y']}")
-    if "hue" in vars_map and vars_map["hue"]:
+    if vars_map.get("hue"):
         parts.append(f"Grouped by: {vars_map['hue']}")
-    if "col" in vars_map and vars_map["col"]:
+    if vars_map.get("col"):
         parts.append(f"Facets: {vars_map['col']}")
-    
+
     context = "; ".join(parts) if parts else "No variables specified"
-    
+
     type_descriptions = {
         "histogram": "A histogram showing the distribution of values",
         "ecdf": "An empirical cumulative distribution function plot",
@@ -1277,7 +1267,7 @@ def _generate_plot_text_summary(plot) -> str:
         "missingness_matrix": "A heatmap showing missing data patterns",
         "estimate_interval": "A point estimate with confidence interval",
     }
-    
+
     desc = type_descriptions.get(plot_type, f"A {plot_type} chart")
     return f"{desc} ({context})."
 
@@ -1288,17 +1278,17 @@ def _generate_plot_csv(plot) -> str | None:
     # In a full implementation, this would use the actual data
     spec = plot.spec
     vars_map = spec.variables
-    
+
     # Create a simple CSV template
     headers = list(vars_map.values())
     if not headers or not any(headers):
         return None
-    
+
     # Filter out None values
     headers = [h for h in headers if h is not None]
     if not headers:
         return None
-    
+
     csv_lines = [",".join(headers)]
     csv_lines.append("# Data rows would be populated from the actual dataset")
     return "\n".join(csv_lines)

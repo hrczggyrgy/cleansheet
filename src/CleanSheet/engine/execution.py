@@ -11,7 +11,7 @@ from typing import Any
 import polars as pl
 
 from CleanSheet.config import get_settings
-from CleanSheet.contracts import DatasetRef, ImportSpec
+from CleanSheet.contracts import CleaningStep, DatasetRef, ImportSpec
 from CleanSheet.errors import ResourceLimitError
 from CleanSheet.jobs.workspace import Workspace
 
@@ -106,37 +106,37 @@ class LazyExecutor:
         Uses efficient sampling that doesn't require full materialization first.
         """
         lf = self.source_lf.select(columns)
-        
+
         # Get total row count for sampling fraction
         total_rows = lf.select(pl.len()).collect().item()
         max_n = min(max_rows, self.settings.max_plot_points, total_rows)
-        
+
         if total_rows <= max_n:
             # Small enough to collect entirely
             df = lf.collect(engine="streaming" if self.settings.polars_streaming else "in-memory")
             return df
-        
+
         # For large datasets, use hash-based sampling to avoid full materialization
         # Add a stable hash-based filter for reproducible sampling
         sample_fraction = max_n / total_rows
-        
+
         # Use hash-based deterministic sampling
         # hash = hash(row_index, seed) % 10000 / 10000 < sample_fraction
         lf = lf.with_row_index("_row_idx")
-        
+
         # Use a simple deterministic hash for sampling
         # This avoids full materialization by filtering during collection
         hash_expr = (
             (pl.col("_row_idx") * 1103515245 + 12345 + seed) % 2147483647
         ) / 2147483647
-        
+
         lf = lf.filter(hash_expr < sample_fraction)
-        
+
         # Add row index for stable ordering, sort, and limit
         df = lf.sort("_row_idx").limit(max_n).collect(
             engine="streaming" if self.settings.polars_streaming else "in-memory"
         )
-        
+
         return df.drop("_row_idx")
 
     def _check_materialization_size(self, lf: pl.LazyFrame, columns: list[str]) -> None:
@@ -252,9 +252,16 @@ def build_preparation_pipeline(
     return lf
 
 
-def compute_recipe_hash(steps: list[dict[str, Any]]) -> str:
+def compute_recipe_hash(steps: list[dict[str, Any] | CleaningStep]) -> str:
     """Compute deterministic hash of preparation recipe."""
-    serialized = json.dumps(steps, sort_keys=True, separators=(",", ":"))
+    # Handle both dict and CleaningStep objects
+    serialized_steps = []
+    for step in steps:
+        if isinstance(step, CleaningStep):
+            serialized_steps.append(step.model_dump(mode="json"))
+        else:
+            serialized_steps.append(step)
+    serialized = json.dumps(serialized_steps, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode()).hexdigest()[:16]
 
 

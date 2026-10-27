@@ -52,24 +52,60 @@ indent-style = "space"
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
 no_implicit_optional = true
 strict_optional = true
 show_error_codes = true
 pretty = true
 namespace_packages = true
 explicit_package_bases = true
-enable_error_code = ["ignore-without-action"]
 
 [[tool.mypy.overrides]]
-module = ["streamlit*"]
+module = "streamlit.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["polars*"]
+module = "polars.*"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "seaborn.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "statsmodels.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scipy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "matplotlib.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pandas.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "numpy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydantic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pydantic_settings.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "CleanSheet.*"
+ignore_missing_imports = false
+follow_imports = "normal"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

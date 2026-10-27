@@ -2,152 +2,183 @@
 
 ## Repository State
 
-This is a **design/planning repository**, not an implemented codebase. All files are Markdown design documents. There is no `pyproject.toml`, no `src/`, no tests, no CI, and no lockfile yet.
+This is an **implemented Streamlit + Polars 2.0 statistical analysis application**. The codebase is complete with all core features implemented.
 
-The primary artifact is `cleansheet_app_blueprint.md` — a detailed blueprint for a Streamlit + Polars 2.0 + seaborn application called **CleanSheet**.
+**Stack (verified):**
+- Python 3.12
+- Streamlit 1.66.0
+- Polars 2.0.0 (streaming enabled)
+- Seaborn 0.13.2 / Matplotlib 3.9.0
+- SciPy 1.13+, Statsmodels 0.14+, Pydantic 2.8+
 
-## Key Design Documents
-
-| File | Purpose |
-|------|---------|
-| `cleansheet_app_blueprint.md` | Complete application blueprint: architecture, statistical policy, UI journey, contracts, verification strategy, 6-week build roadmap |
-| `streamlit_polars_2_user_guide.md` | Practical guide for the target stack (Streamlit 1.66, Polars 2.0, Python 3.12) |
-| `seaborn.md` | Seaborn 0.13.2 ecosystem reference (plotting layer, not a statistics engine) |
-| `scientific-stats-python.md` | Scientific statistical workflow reference (pandas/NumPy/SciPy/statsmodels stack) |
-| `Statistical Analysis of Tabular Data A Plain-Language Guide.md` | Non-technical statistical analysis guide |
-
-## Target Stack (from blueprint)
-
-- **Python**: 3.12
-- **Streamlit**: 1.66.0
-- **Polars**: 2.0.0 (streaming default, spill-to-disk, order changes in group_by/joins)
-- **seaborn**: 0.13.2 (accepts Polars via interchange, converts to pandas internally)
-- **SciPy**: statistical tests and intervals
-- **statsmodels**: multiple-testing adjustments
-- **Matplotlib**: rendering backend (Agg, isolated worker processes)
-- **Pydantic**: typed contracts at service boundaries
-- **uv**: environment manager (recommended)
-
-## Architecture Principles (from blueprint)
-
-1. **Modular monolith**: One Streamlit frontend, one reusable analytical package, bounded local workers
-2. **Boundary rule**: Only UI modules import Streamlit. Analytical services accept validated inputs, return serializable results. Workers never call `st.*` or read session state.
-3. **Polars-first**: Use lazy API (`scan_csv`/`scan_parquet`), native expressions, explicit materialization boundaries. Never convert full table to pandas before seaborn.
-4. **Deterministic rules engine**: Automation = versioned deterministic rules, not LLM decisions. Statistical method selection is rule-based with user confirmation gates.
-5. **Reproducibility**: Every run exports a manifest (input hash, recipe hash, versions, seeds, limits, outcomes). CLI entry point replays recipes headless.
-
-## Critical Polars 2.0 Behaviors to Respect
-
-- Streaming is default for `LazyFrame.collect()` — does not guarantee constant memory for all operations
-- Row order is **not preserved** through `group_by`, joins, `unpivot` — always sort explicitly
-- `explode` on empty list → zero rows (was one null row in 1.x)
-- Direct string-to-temporal casts removed — use `str.to_date`/`str.to_datetime`
-- `LazyFrame.profile()` removed — use `explain()` + `show_graph(engine="streaming", plan_stage="physical")`
-- CSV reader behavior changed — check migration guide before porting older recipes
-
-## Critical Streamlit Behaviors to Respect
-
-- Script reruns top-to-bottom on widget interaction — use `st.session_state` for persistence
-- `st.cache_data` = shared across users, returns copies; `st.cache_resource` = shared instance
-- **Never** globally cache private uploaded data — use Session State or session-scoped cache
-- Forms batch inputs; fragments limit rerun scope
-- `st.dataframe` accepts Polars DataFrame/LazyFrame; explicit Arrow conversion is a boundary choice
-- Uploaded files reach backend memory — "local-first" means loopback binding, not zero network transfer
-
-## Statistical Policy Highlights (from blueprint)
-
-- **Lead with estimates and intervals**, not p-values
-- **Require explicit study design**: independent / paired / unknown (unknown = descriptive only)
-- **Validate before compute**: finite values, variance, category levels, pairing keys, sample counts
-- **No silent test switching** on normality p-values — expose diagnostics instead
-- **Multiple testing**: one comparison = no adjustment; batch = Holm by default, family defined upfront
-- **Descriptive fallback**: when inference blocked, return descriptive output with explanation, never substitute another test silently
-- **Pair by explicit entity key**, never by positional alignment after sorting
-
-## Build Roadmap (6 phases, from blueprint)
-
-| Phase | Focus | Exit Gate |
-|-------|-------|-----------|
-| Week 1 | Foundations: repo, env lock, contracts, workspace, CSV/Parquet import | Valid/invalid inputs handled; original data preserved |
-| Week 2 | Trustworthy overview: roles, quality flags, lazy profiling, prep recipe | Every data change explicit and reversible |
-| Week 3 | Visual workflow: question cards, chart recommendations, bounded plotting | No full-table pandas conversion; sample policies visible |
-| Week 4 | Statistical core: Welch, paired t, Pearson/Spearman, categorical, intervals | Method eligibility + reference-result tests pass |
-| Week 5 | Reproducibility: job runner, limits, report bundle, CLI replay | Cancel/replay/export workflows pass end-to-end |
-| Week 6 | Portfolio release: public demo, usability tests, benchmarks, docs | Published release with disclosed limitations |
-
-## If Implementing: First Commands to Run
+## Quick Start
 
 ```bash
-# From project root (when code exists)
+# From project root
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "streamlit==1.66.0" "polars==2.0.0" pyarrow pytest
-python -m pip install "seaborn[stats]==0.13.2" scipy statsmodels matplotlib pydantic
-python -c "import sys, streamlit, polars; print(sys.version); print(streamlit.__version__); print(polars.__version__)"
-python -m streamlit run app.py
+pip install -e .
+streamlit run app.py
 ```
 
-## Verification Strategy (from blueprint)
+## Test & Verify
 
-| Layer | Required Checks |
-|-------|-----------------|
-| Unit | Parser settings, role inference, transformation validation, rule decisions, state transitions |
-| Statistical | Adapter agreement with pinned libs; independently checked reference cases; interval/contrast direction |
-| Invariance | Row permutation doesn't change order-invariant stats; group reversal flips signed estimates |
-| Paired analysis | Key alignment, duplicate keys, incomplete pairs, occasion ordering, no positional matching |
-| Integration | Input → recipe → result → export; replay gives equivalent results within tolerance |
-| UI | Disabled states, confirmation gates, clear errors, stale-result invalidation, repeated reruns |
-| Browser | Real upload, downloads, reset, separate sessions, navigation during running jobs |
-| Security | Wrong file structure, hostile labels, path traversal, oversized input, formula injection, cross-session leakage |
-| Reliability | Cancellation, timeout, worker crash, stale job completion, disk-full, abandoned workspace cleanup |
-| Performance | Cold/warm timings, peak process-tree memory, scratch use, concurrent-job behavior |
+```bash
+# All tests (28 passing)
+pytest tests/ -v
 
-## Repository Structure (planned, from blueprint)
+# Single test file
+pytest tests/test_analytics.py -v
 
-```
-CleanSheet/
-  app.py
-  pyproject.toml
-  uv.lock
-  README.md
-  LICENSE
-  Dockerfile
-  .streamlit/config.toml
-  src/CleanSheet/
-    config.py, contracts.py, errors.py
-    ui/           # start, import_review, preparation, question, results, export
-    services/     # ingest, prepare, profile, recommend, statistics, visualize, reports
-    engine/       # expressions, execution, sampling
-    jobs/         # runner, worker, workspace
-    reporting/    # templates, interpretations
-    cli.py
-  tests/
-    unit, statistical, integration, ui, security, performance, fixtures
-  examples/
-    public-data, recipes
-  docs/
-    architecture.md, statistical-policy.md, data-handling.md, benchmark-method.md, decisions/
-  benchmarks/
-  .github/workflows/ci.yml
+# Lint + typecheck
+ruff check src/
+mypy src/
 ```
 
-## Do Not Assume
+## Architecture (Implemented)
 
-- ❌ Any code exists yet
-- ❌ `pyproject.toml` or lockfile exists
-- ❌ Tests exist or pass
-- ❌ CI/CD is configured
-- ❌ The exact stack versions have been tested together (blueprint: "candidate choices, not a claim")
-- ❌ Polars 2.0 streaming works for all operations (out-of-core joins/group-bys are planned, not done)
-- ❌ Seaborn is pandas-free (it converts Polars → pandas internally)
+```
+src/CleanSheet/
+├── config.py           # Pydantic Settings (env-driven limits)
+├── contracts.py        # Pydantic v2 models — ALL service boundaries
+├── errors.py           # Typed exceptions with user_message
+├── cli.py              # Headless replay: `cleansheet replay|profile`
+├── engine/
+│   ├── expressions.py  # Polars expression builders
+│   ├── execution.py    # LazyExecutor, materialization boundaries, caching
+│   ├── sampling.py     # Reproducible sampling (stable, stratified, bootstrap)
+│   ├── semantic_typing.py  # Column → SemanticRole inference
+│   ├── assumptions.py  # Diagnostic checks + auto-routing
+│   ├── nonparametric.py    # Mann-Whitney, Wilcoxon, Kruskal-Wallis, post-hoc
+│   ├── discovery.py        # 9-step autonomous discovery + BH-FDR
+│   └── profiling.py        # Single-pass profiling + progressive discovery
+├── services/
+│   ├── ingest.py       # CSV/Parquet validation + SHA-256
+│   ├── prepare.py      # Reversible CleaningStep pipeline
+│   ├── profile.py      # Column profiling + quality issues
+│   ├── recommend.py    # Eligibility gates per Goal
+│   ├── statistics.py   # Adapter pattern (parametric + nonparametric)
+│   ├── visualize.py    # Matplotlib worker isolation, Okabe-Ito palette
+│   └── reports.py      # Markdown/HTML/CSV export + reproduction script
+├── jobs/
+│   ├── runner.py       # ProcessPoolExecutor background jobs
+│   └── workspace.py    # Session-isolated file storage + janitor
+└── ui/                 # Streamlit screens (all import accessibility.py)
+    ├── start.py        # Upload + Study Context intake
+    ├── import_review.py # Import settings + SemanticRole confirmation
+    ├── preparation.py  # Reversible issue cards + recipe
+    ├── question.py     # 3-mode: Guided / Target Scan / Autonomous Discovery
+    ├── results.py      # 9-part Result Card + follow-ups (sensitivity, confounder, subgroup)
+    └── export.py       # ZIP bundle + reproduction script
+```
 
-## When Code Exists: High-Signal Checks
+## Key Conventions (Non-Obvious)
 
-- Run `uv lock` / `pip freeze` to verify exact versions
-- Run `pytest tests/` — check for `tests/statistical/` reference-case tests
-- Run `python -m streamlit run app.py` — verify it starts
-- Check `src/CleanSheet/contracts.py` for Pydantic models matching blueprint typed contracts
-- Check `src/CleanSheet/jobs/runner.py` for worker lifecycle, cancellation, scratch cleanup
-- Check `src/CleanSheet/engine/execution.py` for Polars lazy → materialization boundaries
-- Check `src/CleanSheet/services/statistics.py` for adapter pattern (SciPy/statsmodels behind application-owned interface)
+### Boundary Rule (Enforced)
+- **Only `ui/` imports Streamlit** — `engine/`, `services/`, `jobs/`, `contracts/` are pure Python
+- Services accept `AnalysisRequest` / `ColumnRole` / `DatasetRef` and return `AnalysisResult` / `StatisticalResult` / `ProfilingResult`
+- This enables headless CLI replay and pytest unit tests without Streamlit
+
+### Contracts Are Source of Truth
+- `contracts.py` defines every service I/O via Pydantic v2 (`ConfigDict(extra="forbid", frozen=True)`)
+- Run `pytest tests/test_imports.py::test_contracts` to verify schema validity
+- When changing a service signature, update the contract model first
+
+### Session State Keys (Single Source)
+Managed in `app.py::init_session()`:
+```python
+session_id, workspace_id, current_stage, dataset_ref, study_context,
+column_roles, recipe, recipe_hash, analysis_plan, active_job_id,
+results, plots, warnings, stale_results, pending_analysis_request,
+pending_import_spec, show_reset_confirm, applied_fixes
+```
+- Never add ad-hoc `st.session_state["foo"]` — add to `init_session()` and `reset_session()`
+
+### Resource Budgets (Config-Driven)
+All limits in `config.py::Settings` (env-overridable):
+- `max_upload_size_mb=50`, `max_profiling_columns=50`, `max_plot_points=20000`
+- `inference_materialization_limit_mib=256`, `analysis_job_timeout_seconds=30`
+- `session_scratch_limit_mib=512`, `max_concurrent_jobs=1`
+
+### Polars 2.0 Patterns Used
+- Lazy execution default: `LazyExecutor.source_lf` → `build_preparation_pipeline()` → `.collect(engine="streaming")`
+- Single-pass profiling: `build_single_pass_profiling_exprs()` → one `collect()`
+- Hash-based sampling for plots: `materialize_for_plotting()` with deterministic row-index hash
+- Row order NOT preserved in `group_by`/joins — explicit `.sort()` where needed
+
+### Statistical Policy (Implemented)
+- Lead with estimates + 95% CI, not p-values
+- Effect sizes: Hedges' g (paired/independent), rank-biserial r, ε², Cramér's V, Pearson/Spearman r
+- Bootstrap CIs for all effect sizes (parametric + nonparametric)
+- BH-FDR for autonomous discovery; Holm for post-hoc
+- Descriptive fallback when eligibility fails (never silent test swap)
+- Pair by explicit `pair_id` key, never positional
+
+### Reproducibility
+- Every run exports `run_manifest.json` (hashes, versions, seeds, limits, outcomes)
+- Export ZIP includes `cleansheet_reproduce.py` — standalone script that:
+  1. Verifies source file SHA-256
+  2. Replays cleaning recipe via Polars expressions
+  3. Re-runs analysis and asserts results match within 1e-6
+
+## Development Workflow
+
+```bash
+# 1. Make changes
+# 2. Run affected tests
+pytest tests/test_analytics.py::TestStatisticalAdapters::test_welch_ttest_adapter -v
+
+# 3. Lint + typecheck
+ruff check src/
+mypy src/
+
+# 4. Full test suite
+pytest tests/ -v
+
+# 5. Manual smoke test
+streamlit run app.py
+```
+
+## Streamlit Cloud Deployment
+
+- `packages.txt` = empty (no system deps needed)
+- `.streamlit/config.toml` configures headless, CORS, theme, Matplotlib
+- Deploy from `master` branch, main file `app.py`
+
+## Common Pitfalls
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `ModuleNotFoundError: CleanSheet` | Not installed in env | `pip install -e .` |
+| `KeyError: 'occasion'` in assumptions | Wide-format paired data lacks `occasion` key | Assumptions now check for `pre_col`/`post_col` |
+| Tests fail with `TransformStep` | Renamed to `CleaningStep` in contracts | Update imports to `CleaningStep` |
+| Matplotlib hangs | Missing `matplotlib.use("Agg")` | `visualize.py` sets at module top |
+| Job runner fails on Windows | `mp_context="spawn"` required | Already set in `runner.py` |
+
+## Files That Change Often
+
+- `contracts.py` — schema changes cascade to services/UI
+- `engine/assumptions.py` — new diagnostic checks
+- `engine/nonparametric.py` — new non-parametric tests
+- `services/statistics.py` — new adapters / effect sizes
+- `ui/question.py` — new analysis modes / goals
+- `ui/results.py` — new follow-up actions
+
+## Reference Commands
+
+```bash
+# Headless analysis replay
+cleansheet replay data.parquet recipe.json -o output/
+
+# Profile only
+cleansheet profile data.csv -o output/
+
+# Run with custom config
+CLEANSHEET_MAX_UPLOAD_SIZE_MB=100 streamlit run app.py
+```
+
+## Existing Documentation
+
+- `cleansheet_app_blueprint.md` — original 6-week roadmap (architecture reference)
+- `streamlit_polars_2_user_guide.md` — stack-specific patterns
+- `seaborn.md`, `scientific-stats-python.md` — library references

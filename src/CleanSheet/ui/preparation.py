@@ -6,8 +6,8 @@ import polars as pl
 import streamlit as st
 
 from CleanSheet.contracts import (
-    ColumnRole,
     CleaningStep,
+    ColumnRole,
     JobStatus,
     SemanticRole,
     TransformOp,
@@ -17,14 +17,13 @@ from CleanSheet.jobs.workspace import Workspace
 from CleanSheet.services.prepare import (
     apply_transform,
     create_transform_step,
-    suggest_transformations,
 )
 from CleanSheet.services.profile import run_profiling
 from CleanSheet.ui.accessibility import (
-    render_skip_link,
-    set_page_main_content_id,
     announce_to_screen_reader,
     render_focus_visible_style,
+    render_skip_link,
+    set_page_main_content_id,
 )
 
 
@@ -172,7 +171,7 @@ def _render_issue_cards(
                     description=f"Column has {m['null_count']} missing values ({m['null_pct']:.1f}%). Consider dropping if not essential.",
                     fix_key=fix_key,
                     fix_button_label="Drop Column",
-                    on_fix=lambda col=m['column']: _apply_drop_column(executor, recipe, current_df, col),
+                    on_fix=lambda col=m["column"]: _apply_drop_column(executor, recipe, current_df, col),
                     fix_applied=fix_key in st.session_state.applied_fixes,
                 )
 
@@ -185,7 +184,7 @@ def _render_issue_cards(
                 description=f"Column contains {ni['count']} {ni['issue'].lower()} values that may affect analysis.",
                 fix_key=fix_key,
                 fix_button_label="Drop Non-Finite Rows",
-                on_fix=lambda col=ni['column']: _apply_drop_nonfinite(executor, recipe, current_df, col),
+                on_fix=lambda col=ni["column"]: _apply_drop_nonfinite(executor, recipe, current_df, col),
                 fix_applied=fix_key in st.session_state.applied_fixes,
             )
 
@@ -195,10 +194,10 @@ def _render_issue_cards(
             fix_key = f"recode_cardinality_{hc['column']}"
             _render_issue_card(
                 title=f"🏷️ High Cardinality: `{hc['column']}` ({hc['unique_count']} unique)",
-                description=f"Column has many categories. Consider grouping rare categories into 'Other'.",
+                description="Column has many categories. Consider grouping rare categories into 'Other'.",
                 fix_key=fix_key,
                 fix_button_label="Group Rare Categories",
-                on_fix=lambda col=hc['column']: _apply_group_rare(executor, recipe, current_df, col),
+                on_fix=lambda col=hc["column"]: _apply_group_rare(executor, recipe, current_df, col),
                 fix_applied=fix_key in st.session_state.applied_fixes,
             )
 
@@ -230,11 +229,10 @@ def _render_issue_card(
                     if recipe:
                         st.session_state.recipe = recipe[:-1]
                     st.rerun()
-            else:
-                if st.button(fix_button_label, key=f"fix_{fix_key}", type="primary"):
-                    on_fix()
-                    st.session_state.applied_fixes.add(fix_key)
-                    st.rerun()
+            elif st.button(fix_button_label, key=f"fix_{fix_key}", type="primary"):
+                on_fix()
+                st.session_state.applied_fixes.add(fix_key)
+                st.rerun()
 
 
 def _apply_deduplicate(executor, recipe, current_df):

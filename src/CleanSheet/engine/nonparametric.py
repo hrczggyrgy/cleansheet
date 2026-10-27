@@ -7,14 +7,11 @@ and confidence intervals.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import polars as pl
 from scipy import stats
-from statsmodels.stats.libqsturng import qsturng
 
 try:
     from scipy.stats import bootstrap
@@ -22,13 +19,13 @@ try:
 except ImportError:
     HAS_BOOTSTRAP = False
 
+from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
     IntervalMethod,
     Method,
     StatisticalResult,
 )
-from CleanSheet.config import get_settings
 
 
 def _bootstrap_rank_biserial_ci(
@@ -45,11 +42,11 @@ def _bootstrap_rank_biserial_ci(
         from scipy.stats import mannwhitneyu
         rng = np.random.default_rng(seed)
         n1, n2 = len(group_first), len(group_second)
-        
+
         def statistic(x1, x2):
             u = mannwhitneyu(x1, x2, alternative="two-sided", method="asymptotic").statistic
             return (2 * u) / (n1 * n2) - 1
-        
+
         ci = bootstrap(
             (group_first, group_second),
             statistic,
@@ -77,7 +74,7 @@ def _bootstrap_matched_rank_biserial_ci(
         from scipy.stats import wilcoxon
         rng = np.random.default_rng(seed)
         n = len(diff)
-        
+
         def statistic(x):
             try:
                 result = wilcoxon(x, alternative="two-sided", method="approx")
@@ -89,7 +86,7 @@ def _bootstrap_matched_rank_biserial_ci(
                 pos = np.sum(x > 0)
                 neg = np.sum(x < 0)
                 return (pos - neg) / n if n > 0 else 0
-        
+
         ci = bootstrap(
             (diff,),
             statistic,
@@ -245,7 +242,8 @@ class MannWhitneyUAdapter(TestAdapter):
 class WilcoxonSignedRankAdapter(TestAdapter):
     """Wilcoxon Signed-Rank test with matched rank-biserial correlation.
     Supports both long format (Subject_ID, Occasion, Outcome) 
-    and wide format (Subject_ID, Pre_Value, Post_Value)."""
+    and wide format (Subject_ID, Pre_Value, Post_Value).
+    """
 
     def __init__(self) -> None:
         super().__init__(Method.WILCOXON_SIGNED_RANK, "Wilcoxon signed-rank test")
@@ -253,15 +251,15 @@ class WilcoxonSignedRankAdapter(TestAdapter):
     def run(self, df: pl.DataFrame, request: AnalysisRequest) -> StatisticalResult:
         pair_col = request.variables.get("pair_id")
         contrast = request.contrast
-        
+
         # Detect data format
         is_wide_format = "pre_col" in request.variables and "post_col" in request.variables
-        
+
         if is_wide_format:
             # Wide format: Subject_ID, Pre_Value, Post_Value
             pre_col = request.variables["pre_col"]
             post_col = request.variables["post_col"]
-            
+
             # Filter to complete pairs
             data = df.filter(
                 pl.col(pre_col).is_not_null() &
@@ -271,41 +269,41 @@ class WilcoxonSignedRankAdapter(TestAdapter):
                 ~pl.col(pre_col).is_nan() &
                 ~pl.col(post_col).is_nan()
             )
-            
+
             if len(data) < 2:
                 raise ValueError("Need at least 2 complete pairs")
-            
+
             vals_pre = data[pre_col].to_numpy()
             vals_post = data[post_col].to_numpy()
-            
+
             first, second = post_col, pre_col
             vals_first = vals_post
             vals_second = vals_pre
             first_label, second_label = post_col, pre_col
             n_pairs = len(data)
-            
+
         else:
             # Long format: Subject_ID, Occasion, Outcome
             outcome_col = request.variables["outcome"]
             occasion_col = request.variables["occasion"]
             pair_col = request.variables.get("pair_id")
-            
+
             if not pair_col or not occasion_col or not outcome_col:
                 raise ValueError("Paired test requires pair_id, occasion, and outcome variables")
-            
+
             wide = df.pivot(
                 values=outcome_col,
                 index=pair_col,
                 on=occasion_col,
             ).drop_nulls()
-            
+
             if wide.width < 3:
                 raise ValueError("Need at least two occasions for paired test")
-            
+
             occasion_cols = [c for c in wide.columns if c != pair_col]
             if len(occasion_cols) != 2:
                 raise ValueError("Paired test requires exactly two occasions")
-            
+
             # Determine contrast order
             if contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
                 first, second = occasion_cols[0], occasion_cols[1]
@@ -313,13 +311,13 @@ class WilcoxonSignedRankAdapter(TestAdapter):
                 first, second = occasion_cols[1], occasion_cols[0]
             else:
                 first, second = occasion_cols[0], occasion_cols[1]
-            
+
             vals_first = wide[first].to_numpy()
             vals_second = wide[second].to_numpy()
-            
+
             if len(vals_first) < 2:
                 raise ValueError("Need at least 2 complete pairs")
-            
+
             n_pairs = len(vals_first)
             first_label, second_label = first, second
 
@@ -744,10 +742,9 @@ def run_posthoc_if_needed(
 
         if variances_equal:
             return GamesHowellPosthocAdapter().run(df, request)
-        else:
-            return GamesHowellPosthocAdapter().run(df, request)  # Games-Howell is robust to unequal variances
+        return GamesHowellPosthocAdapter().run(df, request)  # Games-Howell is robust to unequal variances
 
-    elif goal in (Goal.CATEGORICAL_ASSOCIATION,):
+    if goal in (Goal.CATEGORICAL_ASSOCIATION,):
         # For chi-square, we could do standardized residuals
         # This is handled in the assumption checks
         return None
