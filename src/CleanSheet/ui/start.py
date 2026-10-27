@@ -71,7 +71,7 @@ def render_start(ws: Workspace) -> None:
                     st.stop()
 
         if st.session_state.get("pending_upload"):
-            if st.button("Continue with this file", type="primary", use_container_width=True):
+            if st.button("Continue with this file", type="primary", width="stretch"):
                 _process_upload(ws)
                 st.rerun()
 
@@ -88,7 +88,7 @@ def render_start(ws: Workspace) -> None:
 
         selected = st.selectbox("Choose a dataset", list(demo_datasets.keys()))
 
-        if st.button("Load Example", type="primary", use_container_width=True):
+        if st.button("Load Example", type="primary", width="stretch"):
             _load_demo(ws, demo_datasets[selected])
             announce_to_screen_reader(f"Loaded example dataset: {selected}")
             st.rerun()
@@ -217,7 +217,7 @@ def render_study_context(ws: Workspace) -> None:
 
     # Data preview
     st.markdown("### Data Preview (first 5 rows)")
-    st.dataframe(preview.head(5).to_pandas(), hide_index=True, use_container_width=True)
+    st.dataframe(preview.head(5).to_pandas(), hide_index=True, width="stretch")
 
     st.divider()
 
@@ -275,7 +275,7 @@ def render_study_context(ws: Workspace) -> None:
     st.divider()
 
     # Confirm button
-    if st.button("Continue to Data Review →", type="primary", use_container_width=True):
+    if st.button("Continue to Data Review →", type="primary", width="stretch"):
         # Create study context
         context = StudyContext(
             row_independence=row_independence,

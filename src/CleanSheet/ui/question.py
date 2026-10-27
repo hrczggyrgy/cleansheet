@@ -198,7 +198,7 @@ def _render_guided_mode(ws: Workspace, dataset_ref, column_roles, recipe, study_
             st.markdown(f"### {q['icon']} {q['label']}")
             st.caption(q["description"])
             st.caption(f"Requires: {', '.join(q['requires'])}")
-            if st.button("Select", key=f"select_{q['goal'].value}", use_container_width=True):
+            if st.button("Select", key=f"select_{q['goal'].value}", width="stretch"):
                 # Invalidate any pending analysis when goal changes
                 if st.session_state.get("selected_goal") != q["goal"]:
                     _invalidate_pending_analysis()
@@ -212,7 +212,7 @@ def _render_guided_mode(ws: Workspace, dataset_ref, column_roles, recipe, study_
         _render_goal_config(ws, goal, df, role_map, numeric_cols, categorical_cols, ordinal_cols, date_cols, datetime_cols, id_cols, dataset_ref, study_context)
 
     # Back button
-    if st.button("← Back to Preparation"):
+    if st.button("← Back to Preparation", width="stretch"):
         st.session_state.current_stage = JobStatus.DATA_READY
         if "selected_goal" in st.session_state:
             del st.session_state.selected_goal
@@ -397,7 +397,7 @@ def _render_goal_config(
             seed = st.number_input("Random seed", 0, 2**31 - 1, 42, key="seed_input")
 
         # Submit
-        submitted = st.form_submit_button("Check Eligibility & Assumptions", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Check Eligibility & Assumptions", type="primary", width="stretch")
 
         if submitted:
             # Validate group levels
@@ -494,14 +494,14 @@ def _render_goal_config(
         st.divider()
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("← Change Configuration", use_container_width=True):
+            if st.button("← Change Configuration", width="stretch"):
                 if "pending_analysis_request" in st.session_state:
                     del st.session_state.pending_analysis_request
                 if "assumption_report" in st.session_state:
                     del st.session_state.assumption_report
                 st.rerun()
         with col2:
-            if st.button("Run Analysis", type="primary", use_container_width=True):
+            if st.button("Run Analysis", type="primary", width="stretch"):
                 st.session_state.analysis_plan = st.session_state.pending_analysis_request
                 del st.session_state.pending_analysis_request
                 st.session_state.current_stage = JobStatus.RUNNING
@@ -569,7 +569,7 @@ def _render_target_scan_mode(ws: Workspace, dataset_ref, column_roles, recipe, s
         help="The variable you want to predict or explain"
     )
 
-    if target and st.button("Scan for Drivers", type="primary", use_container_width=True):
+    if target and st.button("Scan for Drivers", type="primary", width="stretch"):
         with st.spinner("Scanning for validated drivers..."):
             candidates = run_autonomous_discovery(
                 workspace=ws,
@@ -618,7 +618,7 @@ def _render_discovery_mode(ws: Workspace, dataset_ref, column_roles, recipe, stu
     - Only shows findings with **q < 0.05** and **practical effect sizes**
     """)
 
-    if st.button("🔍 Run Full Discovery Scan", type="primary", use_container_width=True):
+    if st.button("🔍 Run Full Discovery Scan", type="primary", width="stretch"):
         with st.spinner("Running autonomous discovery scan..."):
             candidates = run_autonomous_discovery(
                 workspace=ws,
@@ -667,7 +667,7 @@ def _render_discovery_candidate_card(cand: DiscoveryCandidate, index: int, targe
                 st.metric("Score", f"{cand.composite_score:.0f}")
 
         with col3:
-            if st.button("Run Full Analysis", key=f"discovery_run_{index}", type="primary", use_container_width=True):
+            if st.button("Run Full Analysis", key=f"discovery_run_{index}_{cand.goal.value}", type="primary", width="stretch"):
                 # Build analysis request from candidate
                 from CleanSheet.contracts import (
                     Alternative,

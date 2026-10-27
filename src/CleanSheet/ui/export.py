@@ -82,7 +82,7 @@ def render_export(ws: Workspace) -> None:
     st.divider()
 
     # Generate and download
-    if st.button("📦 Prepare Report", type="primary", use_container_width=True):
+    if st.button("📦 Prepare Report", type="primary", width="stretch"):
         _generate_export(
             ws, dataset_ref, import_spec, column_roles,
             recipe, results, plots, assumption_report,
@@ -108,7 +108,7 @@ def render_export(ws: Workspace) -> None:
                 data=st.session_state.export_zip_data,
                 file_name=st.session_state.export_filename,
                 mime="application/zip",
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.warning("⚠️ Your report settings or analysis have changed. The previous report is no longer valid.")
@@ -118,7 +118,7 @@ def render_export(ws: Workspace) -> None:
                 st.rerun()
 
     st.divider()
-    if st.button("← Back to Results"):
+    if st.button("← Back to Results", width="stretch"):
         st.session_state.current_stage = JobStatus.COMPLETE.value
         st.rerun()
 

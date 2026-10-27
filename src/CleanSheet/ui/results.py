@@ -96,7 +96,7 @@ def render_results(ws: Workspace) -> None:
     st.divider()
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("← Change question", use_container_width=True):
+        if st.button("← Change question", width="stretch"):
             st.session_state.current_stage = JobStatus.PLAN_READY.value
             st.session_state.results = None
             st.session_state.plots = []
@@ -107,13 +107,13 @@ def render_results(ws: Workspace) -> None:
             st.rerun()
 
     with col2:
-        if st.button("🔄 Re-run", use_container_width=True):
+        if st.button("🔄 Re-run", width="stretch"):
             st.session_state.current_stage = JobStatus.RUNNING.value
             st.session_state.results = None
             st.rerun()
 
     with col3:
-        if st.button("Download report →", type="primary", use_container_width=True):
+        if st.button("Download report →", type="primary", width="stretch"):
             st.session_state.current_stage = JobStatus.EXPORT_READY.value
             st.rerun()
 
@@ -575,7 +575,7 @@ def _render_next_actions(stat_result, plan, index: int) -> None:
         cols = st.columns(min(len(actions), 3))
         for i, action in enumerate(actions):
             with cols[i % 3]:
-                if st.button(action["label"], key=action["key"], use_container_width=True):
+                if st.button(action["label"], key=action["key"], width="stretch"):
                     _handle_followup_action(action["type"], stat_result, plan, index)
     else:
         st.caption("No specific follow-ups suggested for this analysis.")
@@ -833,7 +833,7 @@ def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, datas
         "P-value": f"{r['p_value']:.4f}" if r["p_value"] is not None else "N/A",
         "Effect Size": f"{r['effect_size']:.4f}" if r["effect_size"] is not None else "N/A",
     } for r in strata_results])
-    st.dataframe(display_df, hide_index=True, use_container_width=True)
+    st.dataframe(display_df, hide_index=True, width="stretch")
 
     # Check for Simpson's Paradox
     _check_simpsons_paradox(strata_results, plan, z_var)

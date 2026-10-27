@@ -70,7 +70,7 @@ def render_preparation(ws: Workspace) -> None:
 
     # Data preview
     st.markdown("### Current Data Preview")
-    st.dataframe(current_df.head(100).to_pandas(), hide_index=True, use_container_width=True)
+    st.dataframe(current_df.head(100).to_pandas(), hide_index=True, width="stretch")
 
     # Manual transformations
     st.markdown("### Add Transformation")
@@ -99,12 +99,12 @@ def render_preparation(ws: Workspace) -> None:
     # Navigation
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back", use_container_width=True):
+        if st.button("← Back", width="stretch"):
             st.session_state.current_stage = JobStatus.IMPORT_REVIEW
             st.rerun()
 
     with col2:
-        if st.button("Continue to Question →", type="primary", use_container_width=True):
+        if st.button("Continue to Question →", type="primary", width="stretch"):
             st.session_state.column_roles = column_roles
             st.session_state.recipe = recipe
             st.session_state.current_stage = JobStatus.PLAN_READY

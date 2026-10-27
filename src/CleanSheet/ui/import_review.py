@@ -122,11 +122,11 @@ def render_import_review(ws: Workspace) -> None:
         "Column": list(metadata.get("dtypes", {}).keys()),
         "Detected Type": list(metadata.get("dtypes", {}).values()),
     })
-    st.dataframe(schema_df, hide_index=True, use_container_width=True)
+    st.dataframe(schema_df, hide_index=True, width="stretch")
 
     # Data preview
     st.markdown("### Data Preview (First 100 rows)")
-    st.dataframe(preview.to_pandas(), hide_index=True, use_container_width=True)
+    st.dataframe(preview.to_pandas(), hide_index=True, width="stretch")
 
     # Settings status indicator
     if "import_settings_confirmed" in st.session_state:
@@ -138,7 +138,7 @@ def render_import_review(ws: Workspace) -> None:
             st.success("✅ Preview is up to date with current settings.")
 
     # Update preview button
-    if st.button("🔄 Update Preview", type="secondary", use_container_width=True):
+    if st.button("🔄 Update Preview", type="secondary", width="stretch"):
         if raw_data:
             with st.spinner("Re-parsing with current settings..."):
                 temp_spec = ImportSpec(
@@ -173,7 +173,7 @@ def render_import_review(ws: Workspace) -> None:
         draft = st.session_state.import_settings_draft
         st.caption(f"Will use: {draft['encoding']} encoding, '{draft['delimiter']}' delimiter, decimal_comma={draft['decimal_comma']}")
 
-        submitted = st.form_submit_button("Confirm Import & Continue", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Confirm Import & Continue", type="primary", width="stretch")
 
         if submitted:
             # Commit the confirmed settings
@@ -189,7 +189,7 @@ def render_import_review(ws: Workspace) -> None:
             st.rerun()
 
     # Back button
-    if st.button("← Back to Study Context"):
+    if st.button("← Back to Study Context", width="stretch"):
         st.session_state.current_stage = JobStatus.IMPORT_REVIEW
         if "study_context" in st.session_state:
             del st.session_state.study_context
@@ -321,7 +321,7 @@ def _render_semantic_type_confirmation(preview: pl.DataFrame) -> None:
         })
 
     if role_data:
-        st.dataframe(pl.DataFrame(role_data), hide_index=True, use_container_width=True)
+        st.dataframe(pl.DataFrame(role_data), hide_index=True, width="stretch")
 
     # Store confirmed roles
     st.session_state.confirmed_column_roles = column_roles
