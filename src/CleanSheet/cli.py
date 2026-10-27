@@ -37,7 +37,7 @@ def replay_recipe(
     fmt: str = "auto",
 ) -> int:
     """Replay a recipe against input data."""
-    settings = get_settings()
+    get_settings()
 
     # Load recipe
     recipe, analysis_request = load_recipe(recipe_path)
@@ -51,14 +51,16 @@ def replay_recipe(
         fmt = "parquet" if input_path.suffix.lower() in [".parquet", ".pq"] else "csv"
 
     import_spec = ImportSpec()
-    dataset_ref, preview, metadata = ingest_file(workspace, data, str(input_path), import_spec)
+    dataset_ref, _preview, _metadata = ingest_file(workspace, data, str(input_path), import_spec)
 
     print(f"Loaded dataset: {dataset_ref.dataset_id}")
     print(f"Rows: {dataset_ref.row_count:,}, Columns: {dataset_ref.column_count}")
 
     # Apply recipe to get prepared data
-    prepared_df = get_or_create_prepared(workspace, dataset_ref, [s.model_dump(mode="json") for s in recipe])
-    print(f"Prepared data: {prepared_df.height:,} rows × {prepared_df.width} cols")
+    prepared_df = get_or_create_prepared(
+        workspace, dataset_ref, [s.model_dump(mode="json") for s in recipe]
+    )
+    print(f"Prepared data: {prepared_df.height:,} rows x {prepared_df.width} cols")
 
     # Run analysis
     print(f"Running analysis: {analysis_request.goal.value}...")
@@ -66,7 +68,6 @@ def replay_recipe(
 
     # Get first statistical result for display
     stat_result = result.statistical_results[0] if result.statistical_results else None
-    
     print(f"Analysis complete: {stat_result.method.value if stat_result else 'N/A'}")
     if stat_result and stat_result.estimate is not None:
         print(f"  Estimate: {stat_result.estimate:.4f}")
@@ -99,7 +100,7 @@ def profile_only(
         fmt = "parquet" if input_path.suffix.lower() in [".parquet", ".pq"] else "csv"
 
     import_spec = ImportSpec()
-    dataset_ref, preview, metadata = workspace.store_source(data, fmt, import_spec)
+    dataset_ref, _preview, _metadata = workspace.store_source(data, fmt, import_spec)
 
     print(f"Loaded dataset: {dataset_ref.dataset_id}")
     print(f"Rows: {dataset_ref.row_count:,}, Columns: {dataset_ref.column_count}")

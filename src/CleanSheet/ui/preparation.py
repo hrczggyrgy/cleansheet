@@ -422,7 +422,8 @@ def _render_filter_tab(executor, recipe, current_df, column_roles):
             else:
                 expr = "pl.lit(False)"
         else:
-            expr = st.text_input("Polars expression", placeholder="pl.col('col') > 0")
+            st.info("Free-text filter expressions are not allowed for security. Use the range/selection controls above.")
+            expr = "pl.lit(True)"
 
         if st.form_submit_button("Apply Filter"):
             step = create_transform_step(

@@ -213,6 +213,16 @@ class MannWhitneyUAdapter(TestAdapter):
             group_first, group_second, request.confidence_level, request.seed
         )
 
+        assumption_checks = {
+            "test_type": "mann_whitney_u",
+            "n1": n1,
+            "n2": n2,
+            "method": "exact" if n_pairs < 10000 else "asymptotic",
+            "contrast": f"{first} minus {second}",
+        }
+        if not HAS_BOOTSTRAP:
+            assumption_checks["bootstrap_ci"] = "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
+
         return StatisticalResult(
             method=Method.MANN_WHITNEY_U,
             group_counts={first: len(group_first), second: len(group_second)},
@@ -229,13 +239,7 @@ class MannWhitneyUAdapter(TestAdapter):
             unstandardized_effect=hl_estimate,
             unstandardized_effect_ci=(ci_low, ci_high) if ci_low is not None else None,
             effect_magnitude_label=es_interpretation,
-            assumption_checks={
-                "test_type": "mann_whitney_u",
-                "n1": n1,
-                "n2": n2,
-                "method": "exact" if n_pairs < 10000 else "asymptotic",
-                "contrast": f"{first} minus {second}",
-            },
+            assumption_checks=assumption_checks,
         )
 
 
@@ -394,6 +398,16 @@ class WilcoxonSignedRankAdapter(TestAdapter):
         else:
             contrast_label = f"{first_label} minus {second_label}"
 
+        assumption_checks = {
+            "test_type": "wilcoxon_signed_rank",
+            "n_pairs": n_pairs,
+            "method": "exact" if n < 50 else "approx",
+            "contrast": contrast_label,
+            "data_format": "wide (pre/post columns)" if is_wide_format else "long (occasion column)",
+        }
+        if not HAS_BOOTSTRAP:
+            assumption_checks["bootstrap_ci"] = "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
+
         return StatisticalResult(
             method=Method.WILCOXON_SIGNED_RANK,
             group_counts={f"{first_label}": len(vals_first), f"{second_label}": len(vals_second)},
@@ -410,13 +424,7 @@ class WilcoxonSignedRankAdapter(TestAdapter):
             unstandardized_effect=hl_estimate,
             unstandardized_effect_ci=(ci_low, ci_high) if ci_low is not None else None,
             effect_magnitude_label=es_interpretation,
-            assumption_checks={
-                "test_type": "wilcoxon_signed_rank",
-                "n_pairs": n_pairs,
-                "method": "exact" if n < 50 else "approx",
-                "contrast": contrast_label,
-                "data_format": "wide (pre/post columns)" if is_wide_format else "long (occasion column)",
-            },
+            assumption_checks=assumption_checks,
         )
 
 

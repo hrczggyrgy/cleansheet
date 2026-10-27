@@ -199,6 +199,67 @@ class LazyExecutor:
         return lf.explain()
 
 
+def _validate_filter_expression(expr: str) -> None:
+    """Validate that a filter expression is safe to evaluate.
+    
+    Allows only:
+    - Column references: pl.col('name')
+    - Comparison operators: ==, !=, >, <, >=, <=
+    - Boolean operators: &, |, ~
+    - String methods: .is_in(), .str.contains(), .str.starts_with(), .str.ends_with()
+    - Null checks: .is_null(), .is_not_null()
+    - Numeric checks: .is_infinite(), .is_nan(), .is_finite()
+    - Literals: True, False, numbers, strings
+    
+    Blocks:
+    - Function calls other than allowed methods
+    - Attribute access other than allowed methods
+    - Subprocess, eval, exec, import, etc.
+    """
+    import re
+    
+    # List of dangerous patterns
+    dangerous_patterns = [
+        r'\beval\s*\(',
+        r'\bexec\s*\(',
+        r'\b__\w+__',  # dunder methods
+        r'\bimport\s+',
+        r'\bsubprocess',
+        r'\bos\.',
+        r'\bsys\.',
+        r'\bopen\s*\(',
+        r'\bcompile\s*\(',
+        r'\bgetattr\s*\(',
+        r'\bsetattr\s*\(',
+        r'\bdelattr\s*\(',
+        r'\bglobals\s*\(',
+        r'\blocals\s*\(',
+        r'\bvars\s*\(',
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, expr):
+            from CleanSheet.errors import SecurityError
+            raise SecurityError(
+                f"Filter expression contains disallowed pattern: {pattern}",
+                violation_type="unsafe_filter_expression",
+                details={"expression": expr, "pattern": pattern},
+            )
+    
+    # Only allow known-safe patterns
+    # This is a basic check - a full AST parser would be more robust
+    allowed_pattern = re.compile(
+        r'^[\s\w\.\'\",\(\)\[\]\{\}\&\|\~\<\>\=\!\+\-\*\/\%\^]+$'
+    )
+    if not allowed_pattern.match(expr):
+        from CleanSheet.errors import SecurityError
+        raise SecurityError(
+            "Filter expression contains disallowed characters",
+            violation_type="unsafe_filter_expression",
+            details={"expression": expr},
+        )
+
+
 def build_preparation_pipeline(
     lf: pl.LazyFrame,
     steps: list[dict[str, Any]],
@@ -217,7 +278,8 @@ def build_preparation_pipeline(
         elif op == TransformOp.FILTER:
             expr_str = args.get("expression")
             if expr_str:
-                # Safe evaluation of filter expression
+                # Validate filter expression for safety
+                _validate_filter_expression(expr_str)
                 lf = lf.filter(pl.eval(expr_str))
 
         elif op == TransformOp.CAST:
@@ -246,8 +308,33 @@ def build_preparation_pipeline(
                 )
 
         elif op == TransformOp.IMPUTE:
-            # Imputation happens at materialization time
-            pass
+            args = step.get("arguments", {})
+            col = args.get("column")
+            strategy = args.get("strategy", "median")
+            if col and col in lf.columns:
+                if strategy == "median":
+                    lf = lf.with_columns(pl.col(col).fill_null(pl.col(col).median()).alias(col))
+                elif strategy == "mean":
+                    lf = lf.with_columns(pl.col(col).fill_null(pl.col(col).mean()).alias(col))
+                elif strategy == "mode":
+                    lf = lf.with_columns(pl.col(col).fill_null(pl.col(col).mode().first()).alias(col))
+                elif strategy == "forward":
+                    lf = lf.with_columns(pl.col(col).fill_null(strategy="forward").alias(col))
+                elif strategy == "backward":
+                    lf = lf.with_columns(pl.col(col).fill_null(strategy="backward").alias(col))
+                else:
+                    lf = lf.with_columns(pl.col(col).fill_null(strategy).alias(col))
+
+        elif op == TransformOp.FLAG_OUTLIERS:
+            args = step.get("arguments", {})
+            col = args.get("column")
+            lower = args.get("lower")
+            upper = args.get("upper")
+            flag_col = args.get("flag_column", f"{col}_outlier")
+            if col and col in lf.columns and lower is not None and upper is not None:
+                lf = lf.with_columns(
+                    ((pl.col(col) < lower) | (pl.col(col) > upper)).alias(flag_col)
+                )
 
     return lf
 

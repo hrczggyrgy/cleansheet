@@ -260,6 +260,10 @@ def generate_results_csv(result: AnalysisResult) -> str:
     # Apply formula injection protection if enabled
     settings = get_settings()
     if settings.formula_injection_protection:
+        # Escape column names (headers)
+        safe_columns = {col: escape_csv_value(col) for col in df.columns}
+        df = df.rename(safe_columns)
+        # Escape string column values
         for col in df.columns:
             if df[col].dtype == pl.String:
                 df = df.with_columns(pl.col(col).map_elements(escape_csv_value, return_dtype=pl.String))

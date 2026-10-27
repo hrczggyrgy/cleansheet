@@ -226,6 +226,15 @@ class WelchTTestAdapter(TestAdapter):
             request.confidence_level, request.seed
         )
 
+        assumption_checks = {
+            "normality_group1": _check_normality(group_first),
+            "normality_group2": _check_normality(group_second),
+            "variance_ratio": float(np.var(group_first, ddof=1) / np.var(group_second, ddof=1)) if np.var(group_second, ddof=1) > 0 else None,
+            "contrast": f"{first} minus {second}",
+        }
+        if not HAS_BOOTSTRAP:
+            assumption_checks["bootstrap_ci"] = "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
+
         return StatisticalResult(
             method=Method.WELCH_T,
             group_counts={first: len(group_first), second: len(group_second)},
@@ -242,12 +251,7 @@ class WelchTTestAdapter(TestAdapter):
             unstandardized_effect=float(mean_diff),
             unstandardized_effect_ci=(float(ci_low), float(ci_high)),
             effect_magnitude_label=_interpret_hedges_g(hedges_g),
-            assumption_checks={
-                "normality_group1": _check_normality(group_first),
-                "normality_group2": _check_normality(group_second),
-                "variance_ratio": float(np.var(group_first, ddof=1) / np.var(group_second, ddof=1)) if np.var(group_second, ddof=1) > 0 else None,
-                "contrast": f"{first} minus {second}",
-            },
+            assumption_checks=assumption_checks,
         )
 
 
@@ -370,6 +374,15 @@ class PairedTTestAdapter(TestAdapter):
         else:
             contrast_label = f"{first_label} minus {second_label}"
 
+        assumption_checks = {
+            "normality_differences": _check_normality(diff),
+            "n_pairs": n_pairs,
+            "contrast": contrast_label,
+            "data_format": "wide (pre/post columns)" if is_wide_format else "long (occasion column)",
+        }
+        if not HAS_BOOTSTRAP:
+            assumption_checks["bootstrap_ci"] = "not_computed: scipy.stats.bootstrap unavailable (requires SciPy >= 1.11)"
+
         return StatisticalResult(
             method=Method.PAIRED_T,
             group_counts={f"{first_label}": len(vals_first), f"{second_label}": len(vals_second)},
@@ -386,12 +399,7 @@ class PairedTTestAdapter(TestAdapter):
             unstandardized_effect=float(mean_diff),
             unstandardized_effect_ci=(float(ci_low), float(ci_high)),
             effect_magnitude_label=_interpret_hedges_g(hedges_g),
-            assumption_checks={
-                "normality_differences": _check_normality(diff),
-                "n_pairs": n_pairs,
-                "contrast": contrast_label,
-                "data_format": "wide (pre/post columns)" if is_wide_format else "long (occasion column)",
-            },
+            assumption_checks=assumption_checks,
         )
 
 
@@ -423,30 +431,41 @@ class PearsonCorrelationAdapter(TestAdapter):
         result = stats.pearsonr(x, y, alternative=request.alternative.value)
 
         r = result.statistic
-        z = np.arctanh(r)
-        se = 1 / np.sqrt(len(x) - 3)
-        alpha = 1 - request.confidence_level
-        z_crit = stats.norm.ppf(1 - alpha/2)
-        z_low = z - z_crit * se
-        z_high = z + z_crit * se
-        ci_low = np.tanh(z_low)
-        ci_high = np.tanh(z_high)
+        n = len(x)
+
+        # Compute CI only when n > 3 (Fisher-z requires n > 3 for finite SE)
+        if n > 3:
+            z = np.arctanh(r)
+            se = 1 / np.sqrt(n - 3)
+            alpha = 1 - request.confidence_level
+            z_crit = stats.norm.ppf(1 - alpha / 2)
+            z_low = z - z_crit * se
+            z_high = z + z_crit * se
+            ci_low = np.tanh(z_low)
+            ci_high = np.tanh(z_high)
+            interval_status = "computed"
+            interval_method = IntervalMethod.PARAMETRIC
+        else:
+            # n == 3: SE is infinite, CI covers entire range [-1, 1] -> not informative
+            ci_low, ci_high = None, None
+            interval_status = "not_computed"
+            interval_method = IntervalMethod.NOT_COMPUTED
 
         return StatisticalResult(
             method=Method.PEARSON_R,
-            group_counts={"n": len(x)},
+            group_counts={"n": n},
             estimate=float(r),
-            interval=(float(ci_low), float(ci_high)),
-            interval_method=IntervalMethod.PARAMETRIC,
-            interval_status="computed",
+            interval=(float(ci_low), float(ci_high)) if ci_low is not None else None,
+            interval_method=interval_method,
+            interval_status=interval_status,
             statistic=float(r),
-            degrees_of_freedom=len(x) - 2,
+            degrees_of_freedom=n - 2,
             p_value=float(result.pvalue),
             effect_size=float(r),
             effect_size_interpretation=_interpret_correlation(r),
-            effect_size_ci=(float(ci_low), float(ci_high)),
+            effect_size_ci=(float(ci_low), float(ci_high)) if ci_low is not None else None,
             unstandardized_effect=float(r),
-            unstandardized_effect_ci=(float(ci_low), float(ci_high)),
+            unstandardized_effect_ci=(float(ci_low), float(ci_high)) if ci_low is not None else None,
             effect_magnitude_label=_interpret_correlation(r),
             assumption_checks={
                 "linearity": "Assessed via scatterplot",

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import numpy as np
+import pandas as pd
 import polars as pl
 import streamlit as st
+from scipy import stats
 
 from CleanSheet.contracts import (
     Alternative,
@@ -16,7 +20,7 @@ from CleanSheet.contracts import (
     StudyDesign,
 )
 from CleanSheet.engine.execution import LazyExecutor, get_or_create_prepared
-from CleanSheet.jobs.workspace import Workspace
+from CleanSheet.jobs.workspace import Workspace, get_or_create_workspace
 from CleanSheet.services.statistics import run_analysis
 from CleanSheet.services.visualize import (
     PlotType,
@@ -572,13 +576,19 @@ def _render_next_actions(stat_result, plan, index: int) -> None:
         for i, action in enumerate(actions):
             with cols[i % 3]:
                 if st.button(action["label"], key=action["key"], use_container_width=True):
-                    _handle_followup_action(action["type"], stat_result, plan, index, ws, dataset_ref, recipe, column_roles)
+                    _handle_followup_action(action["type"], stat_result, plan, index)
     else:
         st.caption("No specific follow-ups suggested for this analysis.")
 
 
-def _handle_followup_action(action_type: str, stat_result, plan, index: int, ws, dataset_ref, recipe, column_roles) -> None:
+def _handle_followup_action(action_type: str, stat_result, plan, index: int) -> None:
     """Handle follow-up action buttons."""
+    workspace_id = st.session_state.get("workspace_id")
+    ws = get_or_create_workspace(workspace_id)
+    dataset_ref = st.session_state.get("dataset_ref")
+    recipe = st.session_state.get("recipe", [])
+    column_roles = st.session_state.get("column_roles", [])
+
     if action_type == "sensitivity":
         _run_sensitivity_analysis(stat_result, plan, index, ws, dataset_ref, recipe, column_roles)
     elif action_type == "posthoc":
@@ -596,8 +606,6 @@ def _run_confounder_check(stat_result, plan, index: int, ws, dataset_ref, recipe
     1. Are associated with both X and Y
     2. When stratified by, change the direction or magnitude of the X-Y relationship
     """
-    from CleanSheet.contracts import Goal
-    from CleanSheet.engine.execution import LazyExecutor
 
     st.markdown("---")
     st.markdown("### 🔍 Confounder / Simpson's Paradox Check")
@@ -682,7 +690,6 @@ def _run_confounder_check(stat_result, plan, index: int, ws, dataset_ref, recipe
 
 def _test_association(df: pl.DataFrame, var1: str, var2: str) -> float | None:
     """Test association between two variables, return p-value."""
-    from scipy import stats
 
     if var1 not in df.columns or var2 not in df.columns:
         return None
@@ -740,9 +747,6 @@ def _test_association(df: pl.DataFrame, var1: str, var2: str) -> float | None:
 
 def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, dataset_ref, recipe, column_roles) -> None:
     """Run the original analysis stratified by Z and show results."""
-    from CleanSheet.contracts import Goal
-    from CleanSheet.engine.execution import LazyExecutor
-    from CleanSheet.services.statistics import run_analysis
 
     st.markdown("---")
     st.markdown(f"### 📊 Stratified Analysis by `{z_var}`")
@@ -821,7 +825,6 @@ def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, datas
     # Display results table
     st.markdown("**Stratum-Specific Results:**")
 
-    import pandas as pd
     display_df = pd.DataFrame([{
         f"`{z_var}` Level": r["level"],
         "n": r["n"],
@@ -833,10 +836,10 @@ def _run_stratified_analysis(plan, x_var: str, y_var: str, z_var: str, ws, datas
     st.dataframe(display_df, hide_index=True, use_container_width=True)
 
     # Check for Simpson's Paradox
-    _check_simpsons_paradox(strata_results, plan, x_var, y_var, z_var)
+    _check_simpsons_paradox(strata_results, plan, z_var)
 
 
-def _check_simpsons_paradox(strata_results, plan, x_var, y_var, z_var):
+def _check_simpsons_paradox(strata_results, plan, z_var):
     """Check if direction of effect reverses across strata."""
     # Get overall effect direction
     overall_estimate = None
@@ -918,8 +921,6 @@ def _run_subgroup_analysis(stat_result, plan, index: int, ws, dataset_ref, recip
 
 def _run_sensitivity_analysis(stat_result, plan, index: int, ws, dataset_ref, recipe, column_roles) -> None:
     """Run sensitivity analysis excluding outliers and show comparison."""
-    from CleanSheet.engine.execution import LazyExecutor
-    from CleanSheet.services.statistics import run_analysis
 
     # Check if outliers were flagged
     outlier_check = stat_result.assumption_checks.get("outliers", {})
@@ -992,7 +993,7 @@ def _run_sensitivity_analysis(stat_result, plan, index: int, ws, dataset_ref, re
                 "affected_column_count": 0,
                 "step_id": len(recipe),
                 "operation_type": "filter",
-                "timestamp": "2026-10-27T00:00:00",
+                "timestamp": datetime.now(UTC).isoformat(),
                 "reversible": True,
             }]
 

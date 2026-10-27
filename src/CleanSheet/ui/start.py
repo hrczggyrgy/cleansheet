@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import io
+
+import polars as pl
+import seaborn as sns
 import streamlit as st
 
 from CleanSheet.config import get_settings
@@ -162,8 +166,6 @@ def _detect_repeated_ids(df: pl.DataFrame) -> None:
 
 def _load_demo(ws: Workspace, dataset_name: str) -> None:
     """Load a demo dataset."""
-    import polars as pl
-    import seaborn as sns
 
     try:
         # Load from seaborn
@@ -171,7 +173,6 @@ def _load_demo(ws: Workspace, dataset_name: str) -> None:
         df = pl.from_pandas(pdf)
 
         # Convert to bytes
-        import io
         buf = io.BytesIO()
         df.write_parquet(buf)
         data = buf.getvalue()

@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +28,7 @@ class Workspace:
         self.workspace_id = workspace_id or uuid.uuid4().hex[:12]
         self.root = self.settings.workspace_root / self.workspace_id
         self.scratch = self.settings.scratch_dir / self.workspace_id
-        self._created = datetime.utcnow()
+        self._created = datetime.now(UTC)
         self._size_bytes = 0
         self._setup()
 
@@ -201,7 +201,7 @@ class Workspace:
     def _should_cleanup(self) -> bool:
         """Check if workspace should be cleaned up due to inactivity."""
         if self.settings.environment == "production":
-            inactive_threshold = datetime.utcnow() - timedelta(minutes=self.settings.session_inactivity_minutes)
+            inactive_threshold = datetime.now(UTC) - timedelta(minutes=self.settings.session_inactivity_minutes)
             return self._created < inactive_threshold
         return False
 
@@ -282,7 +282,7 @@ class WorkspaceManager:
             max_age_minutes = self.settings.session_inactivity_minutes * 2
 
         count = 0
-        cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        cutoff = datetime.now(UTC) - timedelta(minutes=max_age_minutes)
 
         if not self.settings.workspace_root.exists():
             return 0
@@ -310,6 +310,23 @@ class WorkspaceManager:
 
 # Global workspace manager instance
 _workspace_manager: WorkspaceManager | None = None
+
+
+def get_or_create_workspace(workspace_id: str | None = None) -> Workspace:
+    """Get or create workspace by ID (for non-Streamlit contexts).
+    
+    In Streamlit contexts, use app.get_or_create_workspace() which uses session_state.
+    """
+    ws_manager = get_workspace_manager()
+
+    if workspace_id is None:
+        ws = ws_manager.create()
+        return ws
+
+    ws = ws_manager.get(workspace_id)
+    if ws is None:
+        ws = ws_manager.create(workspace_id)
+    return ws
 
 
 def get_workspace_manager() -> WorkspaceManager:
