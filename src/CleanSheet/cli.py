@@ -10,8 +10,8 @@ from pathlib import Path
 from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
+    CleaningStep,
     ImportSpec,
-    TransformStep,
 )
 from CleanSheet.engine.execution import get_or_create_prepared
 from CleanSheet.jobs.workspace import Workspace
@@ -19,11 +19,11 @@ from CleanSheet.services.profile import run_profiling
 from CleanSheet.services.statistics import run_analysis
 
 
-def load_recipe(recipe_path: Path) -> tuple[list[TransformStep], AnalysisRequest]:
+def load_recipe(recipe_path: Path) -> tuple[list[CleaningStep], AnalysisRequest]:
     """Load recipe and analysis request from JSON."""
     data = json.loads(recipe_path.read_text())
 
-    recipe = [TransformStep(**step) for step in data.get("recipe", [])]
+    recipe = [CleaningStep(**step) for step in data.get("recipe", [])]
     analysis_request = AnalysisRequest(**data.get("analysis", {}))
 
     return recipe, analysis_request

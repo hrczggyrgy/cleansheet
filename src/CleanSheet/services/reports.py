@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,7 @@ from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
     AnalysisResult,
+    AssumptionReport,
     DatasetRef,
     RunManifest,
 )
@@ -44,6 +45,7 @@ def generate_markdown_report(
     dataset_ref: DatasetRef,
     profile: Any,
     manifest: RunManifest,
+    assumption_report: AssumptionReport | None = None,
 ) -> str:
     """Generate a Markdown report."""
     lines = []
@@ -52,7 +54,7 @@ def generate_markdown_report(
     lines.append("# CleanSheet Analysis Report")
     lines.append("")
     lines.append(f"**Run ID:** {result.run_id}")
-    lines.append(f"**Generated:** {datetime.utcnow().isoformat()}Z")
+    lines.append(f"**Generated:** {datetime.now(timezone.utc).isoformat()}Z")
     lines.append(f"**Dataset:** {dataset_ref.dataset_id} ({dataset_ref.row_count:,} rows × {dataset_ref.column_count} cols)")
     lines.append(f"**Source Hash:** `{dataset_ref.source_sha256[:16]}`")
     lines.append("")
@@ -83,6 +85,27 @@ def generate_markdown_report(
     if result.request.confidence_level != 0.95:
         lines.append(f"- **Confidence Level:** {result.request.confidence_level:.0%}")
     lines.append("")
+
+    # Assumption Diagnostics
+    if assumption_report:
+        lines.append("## Assumption Diagnostics")
+        lines.append("")
+        lines.append(f"**Routing Explanation:** {assumption_report.routing_explanation}")
+        lines.append(f"**Auto-Routed:** {'Yes' if assumption_report.auto_routed else 'No'}")
+        lines.append(f"**Recommended Method:** {assumption_report.recommended_method.value.replace('_', ' ').title()}")
+        if assumption_report.fallback_method:
+            lines.append(f"**Fallback Method:** {assumption_report.fallback_method.value.replace('_', ' ').title()}")
+        lines.append("")
+
+        for check in assumption_report.checks:
+            status = "✅ PASS" if check.passed else ("❌ FAIL" if check.passed is False else "ℹ️ INFO")
+            lines.append(f"- **{check.name}** ({check.severity.upper()}): {status}")
+            lines.append(f"  - Message: {check.message}")
+            if check.value is not None:
+                lines.append(f"  - Value: {check.value}")
+            if check.threshold is not None:
+                lines.append(f"  - Threshold: {check.threshold}")
+        lines.append("")
 
     # Results
     lines.append("## Results")
@@ -135,9 +158,9 @@ def generate_markdown_report(
                 lines.append(f"- {k}: {v}")
             lines.append("")
 
-        # Assumption Checks
+        # Assumption Checks (from statistical result)
         if stat_result.assumption_checks:
-            lines.append("**Assumption Checks:**")
+            lines.append("**Assumption Checks (from test):**")
             for k, v in stat_result.assumption_checks.items():
                 if isinstance(v, dict):
                     lines.append(f"- {k}:")
@@ -156,7 +179,7 @@ def generate_markdown_report(
         lines.append("")
 
     # Limitations
-    lines.append("## Limitations")
+    lines.append("## Limitations & Scope")
     lines.append("")
     lines.append(f"- This analysis is **{result.request.analysis_purpose}** in nature.")
     if result.request.study_design.value == "unknown":
@@ -164,6 +187,7 @@ def generate_markdown_report(
     lines.append("- Confidence intervals assume correct model specification and independence.")
     lines.append(f"- Missing data handled via {result.request.missing_policy.value}; results may be biased if missingness is not at random.")
     lines.append("- Effect size interpretations are conventional guidelines, not definitive thresholds.")
+    lines.append("- Correlation does not imply causation.")
     lines.append("")
 
     # Reproducibility
@@ -219,8 +243,13 @@ def generate_results_csv(result: AnalysisResult) -> str:
             "df": stat.degrees_of_freedom,
             "p_value": stat.p_value,
             "adjusted_p_value": stat.adjusted_p_value,
+            "q_value": stat.q_value,
             "effect_size": stat.effect_size,
             "effect_interpretation": stat.effect_size_interpretation,
+            "effect_magnitude": stat.effect_magnitude_label,
+            "unstandardized_effect": stat.unstandardized_effect,
+            "unstandardized_ci_lower": stat.unstandardized_effect_ci[0] if stat.unstandardized_effect_ci else None,
+            "unstandardized_ci_upper": stat.unstandardized_effect_ci[1] if stat.unstandardized_effect_ci else None,
         }
         # Add group counts
         for k, v in stat.group_counts.items():
@@ -235,6 +264,26 @@ def generate_results_csv(result: AnalysisResult) -> str:
             if df[col].dtype == pl.String:
                 df = df.with_columns(pl.col(col).map_elements(escape_csv_value, return_dtype=pl.String))
 
+    return df.write_csv()
+
+
+def generate_assumption_csv(assumption_report: AssumptionReport) -> str:
+    """Generate CSV with assumption diagnostics."""
+    rows = []
+    for check in assumption_report.checks:
+        rows.append({
+            "check_name": check.name,
+            "passed": check.passed,
+            "value": check.value,
+            "threshold": check.threshold,
+            "message": check.message,
+            "severity": check.severity,
+        })
+
+    if not rows:
+        rows.append({"check_name": "none", "passed": True, "value": None, "threshold": None, "message": "No assumption checks", "severity": "info"})
+
+    df = pl.DataFrame(rows)
     return df.write_csv()
 
 
@@ -294,9 +343,275 @@ def generate_quality_issues_csv(profile: Any) -> str:
     return df.write_csv()
 
 
-def generate_recipe_json(result: AnalysisResult) -> str:
-    """Generate recipe JSON."""
-    return result.request.model_dump_json(indent=2)
+def generate_reproduction_script(
+    dataset_ref: DatasetRef,
+    import_spec: Any,
+    column_roles: list[Any],
+    recipe: list[Any],
+    analysis_request: AnalysisRequest,
+    result: AnalysisResult,
+) -> str:
+    """Generate a standalone Python script to reproduce the analysis."""
+    script_lines = [
+        "#!/usr/bin/env python3",
+        "\"\"\"",
+        f"CleanSheet Reproduction Script",
+        f"Run ID: {result.run_id}",
+        f"Generated: {datetime.now(timezone.utc).isoformat()}Z",
+        f"Source Data Hash: {dataset_ref.source_sha256}",
+        "\"\"\"",
+        "",
+        "import json",
+        "import hashlib",
+        "from pathlib import Path",
+        "",
+        "import numpy as np",
+        "import polars as pl",
+        "from scipy import stats",
+        "",
+        "# ============================================================",
+        "# CONFIGURATION (extracted from CleanSheet run manifest)",
+        "# ============================================================",
+        "",
+        f"SOURCE_FILE = \"{{source_file}}\"  # Replace with path to your data file",
+        f"SOURCE_SHA256 = \"{dataset_ref.source_sha256}\"",
+        f"RECIPE = {json.dumps([r.model_dump() for r in recipe], indent=2, default=str)}",
+        f"ANALYSIS_REQUEST = {analysis_request.model_dump_json(indent=2)}",
+        f"COLUMN_ROLES = {json.dumps([r.model_dump() for r in column_roles], indent=2, default=str)}",
+        "",
+        "# ============================================================",
+        "# STEP 1: LOAD AND VERIFY SOURCE DATA",
+        "# ============================================================",
+        "",
+        "def load_and_verify_source(filepath: str) -> pl.DataFrame:",
+        "    \"\"\"Load source file and verify SHA-256 hash.\"\"\"",
+        "    data = Path(filepath).read_bytes()",
+        "    actual_sha256 = hashlib.sha256(data).hexdigest()",
+        f"    expected_sha256 = \"{dataset_ref.source_sha256}\"",
+        "    if actual_sha256 != expected_sha256:",
+        f"        raise ValueError(f\"Source file hash mismatch: expected {{expected_sha256}}, got {{actual_sha256}}\")",
+        "    ",
+        f"    if filepath.suffix.lower() in ['.parquet', '.pq']:",
+        "        df = pl.read_parquet(filepath)",
+        "    else:",
+        "        df = pl.read_csv(filepath)",
+        "    return df",
+        "",
+        "# ============================================================",
+        "# STEP 2: APPLY CLEANING RECIPE",
+        "# ============================================================",
+        "",
+        "def apply_recipe(df: pl.DataFrame, recipe: list) -> pl.DataFrame:",
+        "    \"\"\"Apply cleaning recipe steps to DataFrame.\"\"\"",
+        "    for step in recipe:",
+        "        op = step.get('operation')",
+        "        args = step.get('arguments', {})",
+        "        ",
+        "        if op == 'rename':",
+        "            mapping = args.get('mapping', {})",
+        "            df = df.rename(mapping)",
+        "        elif op == 'filter':",
+        "            expr_str = args.get('expression')",
+        "            if expr_str:",
+        "                df = df.filter(eval(expr_str, {\"pl\": pl}))",
+        "        elif op == 'cast':",
+        "            casts = args.get('casts', {})",
+        "            for col, dtype_str in casts.items():",
+        "                dtype = getattr(pl, dtype_str)",
+        "                df = df.with_columns(pl.col(col).cast(dtype).alias(col))",
+        "        elif op == 'deduplicate':",
+        "            subset = args.get('subset')",
+        "            keep = args.get('keep', 'first')",
+        "            if subset:",
+        "                df = df.unique(subset=subset, keep=keep, maintain_order=True)",
+        "            else:",
+        "                df = df.unique(keep=keep, maintain_order=True)",
+        "        elif op == 'drop_columns':",
+        "            columns = args.get('columns', [])",
+        "            df = df.drop(columns)",
+        "        elif op == 'recode_categorical':",
+        "            mapping = args.get('mapping', {})",
+        "            for col, recode in mapping.items():",
+        "                df = df.with_columns(pl.col(col).replace(recode).alias(col))",
+        "        elif op == 'flag_outliers':",
+        "            col = args.get('column')",
+        "            lower = args.get('lower')",
+        "            upper = args.get('upper')",
+        "            flag_col = args.get('flag_column', f'{col}_outlier')",
+        "            df = df.with_columns(",
+        "                ((pl.col(col) < lower) | (pl.col(col) > upper)).alias(flag_col)",
+        "            )",
+        "    return df",
+        "",
+        "# ============================================================",
+        "# STEP 3: RUN STATISTICAL ANALYSIS",
+        "# ============================================================",
+        "",
+        "def run_welch_t(df: pl.DataFrame, request: dict) -> dict:",
+        "    \"\"\"Run Welch's t-test with Hedges' g and bootstrap CI.\"\"\"",
+        "    vars_ = request['variables']",
+        "    levels = request.get('group_levels', [])",
+        "    contrast = request.get('contrast', '')",
+        "    confidence = request.get('confidence_level', 0.95)",
+        "    seed = request.get('seed', 42)",
+        "    alternative = request.get('alternative', 'two-sided')",
+        "    ",
+        "    outcome_col = vars_['outcome']",
+        "    group_col = vars_['group']",
+        "    ",
+        "    # Determine contrast order",
+        "    if contrast and contrast.endswith(f\"_minus_{{levels[1]}}\") and contrast.startswith(f\"{{levels[0]}}_\"):",
+        "        first, second = levels[0], levels[1]",
+        "    elif contrast and contrast.endswith(f\"_minus_{{levels[0]}}\") and contrast.startswith(f\"{{levels[1]}}_\"):",
+        "        first, second = levels[1], levels[0]",
+        "    else:",
+        "        first, second = levels[0], levels[1]",
+        "    ",
+        "    data = df.filter(",
+        "        pl.col(group_col).is_in(levels) &",
+        "        pl.col(outcome_col).is_not_null() &",
+        "        ~pl.col(outcome_col).is_infinite() &",
+        "        ~pl.col(outcome_col).is_nan()",
+        "    )",
+        "    ",
+        "    group_first = data.filter(pl.col(group_col) == first)[outcome_col].to_numpy()",
+        "    group_second = data.filter(pl.col(group_col) == second)[outcome_col].to_numpy()",
+        "    ",
+        "    # Welch's t-test",
+        "    result = stats.ttest_ind(group_first, group_second, equal_var=False, alternative=alternative)",
+        "    mean_diff = float(np.mean(group_first) - np.mean(group_second))",
+        "    se = float(np.sqrt(np.var(group_first, ddof=1)/len(group_first) + np.var(group_second, ddof=1)/len(group_second)))",
+        "    df_welch = float((np.var(group_first, ddof=1)/len(group_first) + np.var(group_second, ddof=1)/len(group_second))**2 / (",
+        "        (np.var(group_first, ddof=1)/len(group_first))**2/(len(group_first)-1) +",
+        "        (np.var(group_second, ddof=1)/len(group_second))**2/(len(group_second)-1)",
+        "    ))",
+        "    ",
+        "    # CI for mean difference",
+        "    from scipy.stats import t",
+        "    alpha = 1 - confidence",
+        "    t_crit = t.ppf(1 - alpha/2, df_welch)",
+        "    ci_low = mean_diff - t_crit * se",
+        "    ci_high = mean_diff + t_crit * se",
+        "    ",
+        "    # Hedges' g",
+        "    pooled_sd = np.sqrt(((len(group_first)-1)*np.var(group_first, ddof=1) + (len(group_second)-1)*np.var(group_second, ddof=1)) / (len(group_first) + len(group_second) - 2))",
+        "    cohen_d = mean_diff / pooled_sd if pooled_sd > 0 else 0",
+        "    n_total = len(group_first) + len(group_second)",
+        "    hedges_correction = 1 - 3 / (4 * n_total - 9) if n_total > 2 else 1",
+        "    hedges_g = cohen_d * hedges_correction",
+        "    ",
+        "    # Bootstrap CI for Hedges' g",
+        "    effect_size_ci = None",
+        "    try:",
+        "        from scipy.stats import bootstrap",
+        "        def hedges_g_fn(x1, x2):",
+        "            md = np.mean(x1) - np.mean(x2)",
+        "            psd = np.sqrt(((len(x1)-1)*np.var(x1, ddof=1) + (len(x2)-1)*np.var(x2, ddof=1)) / (len(x1) + len(x2) - 2))",
+        "            if psd == 0: return 0.0",
+        "            cd = md / psd",
+        "            n = len(x1) + len(x2)",
+        "            hc = 1 - 3 / (4 * n - 9) if n > 2 else 1",
+        "            return cd * hc",
+        "        rng = np.random.default_rng(seed)",
+        "        ci = bootstrap(",
+        "            (group_first, group_second),",
+        "            hedges_g_fn,",
+        "            confidence_level=confidence,",
+        "            n_resamples=2000,",
+        "            method='percentile',",
+        "            paired=False,",
+        "            rng=rng,",
+        "        )",
+        "        effect_size_ci = (float(ci.confidence_interval.low), float(ci.confidence_interval.high))",
+        "    except Exception:",
+        "        pass",
+        "    ",
+        "    return {",
+        "        'method': 'welch_t',",
+        "        'estimate': mean_diff,",
+        "        'ci': (ci_low, ci_high),",
+        "        'statistic': float(result.statistic),",
+        "        'df': df_welch,",
+        "        'p_value': float(result.pvalue),",
+        "        'effect_size': float(hedges_g),",
+        "        'effect_size_ci': effect_size_ci,",
+        "        'group_counts': {first: len(group_first), second: len(group_second)},",
+        "    }",
+        "",
+        "# ============================================================",
+        "# MAIN EXECUTION",
+        "# ============================================================",
+        "",
+        "if __name__ == \"__main__\":",
+        "    import sys",
+        "    ",
+        "    if len(sys.argv) < 2:",
+        "        print(f\"Usage: {{sys.argv[0]}} <source_file>\")",
+        "        sys.exit(1)",
+        "    ",
+        "    source_file = sys.argv[1]",
+        "    ",
+        "    print(f\"Loading data from {{source_file}}...\")",
+        "    df = load_and_verify_source(source_file)",
+        "    print(f\"Loaded {{df.height}} rows × {{df.width}} columns\")",
+        "    ",
+        "    print(\"Applying cleaning recipe...\")",
+        "    df = apply_recipe(df, RECIPE)",
+        "    print(f\"Prepared data: {{df.height}} rows × {{df.width}} columns\")",
+        "    ",
+        "    print(f\"Running analysis: {{ANALYSIS_REQUEST['goal']}}...\")",
+        "    ",
+        "    if ANALYSIS_REQUEST['goal'] == 'compare_two_means':",
+        "        method = ANALYSIS_REQUEST.get('method', 'welch_t')",
+        "        if method == 'welch_t':",
+        "            res = run_welch_t(df, ANALYSIS_REQUEST)",
+        "        elif method == 'mann_whitney_u':",
+        "            print(\"Mann-Whitney U not yet implemented in reproduction script\")",
+        "            sys.exit(1)",
+        "        else:",
+        "            print(f\"Unknown method: {{method}}\")",
+        "            sys.exit(1)",
+        "    else:",
+        "        print(f\"Goal {{ANALYSIS_REQUEST['goal']}} not yet implemented in reproduction script\")",
+        "        sys.exit(1)",
+        "    ",
+        "    print(f\"\\nResults:\")",
+        "    print(f\"  Estimate: {{res['estimate']:.4f}}\")",
+        "    print(f\"  95% CI: [{{res['ci'][0]:.4f}}, {{res['ci'][1]:.4f}}]\")",
+        "    print(f\"  t({{res['df']:.1f}}) = {{res['statistic']:.4f}}, p = {{res['p_value']:.6f}}\")",
+        "    print(f\"  Hedges' g = {{res['effect_size']:.4f}}\")",
+        "    if res['effect_size_ci']:",
+        "        print(f\"  Hedges' g 95% CI: [{{res['effect_size_ci'][0]:.4f}}, {{res['effect_size_ci'][1]:.4f}}]\")",
+        "    print(f\"  Group counts: {{res['group_counts']}}\")",
+        "",
+        "# ============================================================",
+        "# VERIFICATION",
+        "# ============================================================",
+        "",
+        "    # Verify against original results",
+        "    original = {",
+        f"        'estimate': {result.statistical_results[0].estimate},",
+        f"        'ci': {list(result.statistical_results[0].interval) if result.statistical_results[0].interval else None},",
+        f"        'statistic': {result.statistical_results[0].statistic},",
+        f"        'df': {result.statistical_results[0].degrees_of_freedom},",
+        f"        'p_value': {result.statistical_results[0].p_value},",
+        f"        'effect_size': {result.statistical_results[0].effect_size},",
+        f"        'effect_size_ci': {list(result.statistical_results[0].effect_size_ci) if result.statistical_results[0].effect_size_ci else None},",
+        "    }",
+        "    ",
+        "    tolerance = 1e-6",
+        "    for key in ['estimate', 'statistic', 'p_value', 'effect_size']:",
+        "        if key in original and original[key] is not None:",
+        "            diff = abs(res[key] - original[key])",
+        "            if diff > tolerance:",
+        "                print(f\"⚠️  MISMATCH in {{key}}: reproduced={{res[key]}}, original={{original[key]}} (diff={{diff}})\")",
+        "            else:",
+        "                print(f\"✅ {{key}} matches (diff={{diff:.2e}})\")",
+        "    ",
+        "    print(\"\\nReproduction complete!\")",
+        "",
+    ]
+    return "\n".join(script_lines)
 
 
 def generate_run_manifest(
@@ -328,8 +643,8 @@ def generate_run_manifest(
         dependency_versions=settings.get_dependency_versions() if hasattr(settings, "get_dependency_versions") else {},
         seeds={"analysis": analysis_request.seed, "plotting": 42},
         timestamps={
-            "started": datetime.utcnow().isoformat(),
-            "completed": datetime.utcnow().isoformat(),
+            "started": datetime.now(timezone.utc).isoformat(),
+            "completed": datetime.now(timezone.utc).isoformat(),
         },
         resource_limits=settings.get_resource_limits() if hasattr(settings, "get_resource_limits") else {},
         outcomes={
@@ -351,6 +666,7 @@ def generate_export_bundle(
     profile: Any,
     include_data: bool = False,
     plots: list[Any] | None = None,
+    assumption_report: AssumptionReport | None = None,
 ) -> Path:
     """Generate a complete export bundle as a ZIP file."""
     settings = get_settings()
@@ -361,13 +677,18 @@ def generate_export_bundle(
         result.request, result, settings
     )
 
-    markdown = generate_markdown_report(result, dataset_ref, profile, manifest)
+    markdown = generate_markdown_report(result, dataset_ref, profile, manifest, assumption_report)
     html = generate_html_report(markdown)
     results_csv = generate_results_csv(result)
+    assumption_csv = generate_assumption_csv(assumption_report) if assumption_report else ""
     data_dict_csv = generate_data_dictionary(profile).write_csv()
     quality_csv = generate_quality_issues_csv(profile)
-    recipe_json = generate_recipe_json(result)
+    recipe_json = generate_recipe_json(recipe)
     manifest_json = manifest.to_json()
+    reproduction_script = generate_reproduction_script(
+        dataset_ref, import_spec, column_roles, recipe,
+        result.request, result
+    )
 
     # Use provided plots or generate placeholder specs
     plot_data = plots if plots is not None else []
@@ -379,10 +700,13 @@ def generate_export_bundle(
         zf.writestr("report.md", markdown)
         zf.writestr("report.html", html)
         zf.writestr("results.csv", results_csv)
+        if assumption_csv:
+            zf.writestr("assumption_diagnostics.csv", assumption_csv)
         zf.writestr("data_dictionary.csv", data_dict_csv)
         zf.writestr("quality_issues.csv", quality_csv)
         zf.writestr("recipe.json", recipe_json)
         zf.writestr("run_manifest.json", manifest_json)
+        zf.writestr("cleansheet_reproduce.py", reproduction_script)
 
         # Figures
         for i, plot in enumerate(plot_data):

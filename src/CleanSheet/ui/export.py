@@ -9,6 +9,12 @@ from CleanSheet.contracts import JobStatus
 from CleanSheet.jobs.workspace import Workspace
 from CleanSheet.services.profile import run_profiling
 from CleanSheet.services.reports import generate_export_bundle
+from CleanSheet.ui.accessibility import (
+    render_skip_link,
+    set_page_main_content_id,
+    announce_to_screen_reader,
+    render_focus_visible_style,
+)
 
 
 def _compute_export_signature(results, recipe, column_roles, import_spec, include_charts: bool, include_data: bool) -> str:
@@ -32,6 +38,13 @@ def render_export(ws: Workspace) -> None:
     column_roles = st.session_state.get("column_roles", [])
     import_spec = st.session_state.get("import_spec")
     results = st.session_state.get("results")
+    plots = st.session_state.get("plots", [])
+    assumption_report = st.session_state.get("assumption_report")
+
+    # Accessibility
+    render_skip_link()
+    render_focus_visible_style()
+    set_page_main_content_id()
 
     if dataset_ref is None or results is None:
         st.error("No analysis to export.")
@@ -42,17 +55,20 @@ def render_export(ws: Workspace) -> None:
 
     st.title("📥 Download Report")
     st.caption("Your analysis is complete. Download a reproducible report bundle.")
+    announce_to_screen_reader("Export page loaded. Choose export options and download your report bundle.")
 
     st.markdown("### What's included")
     st.markdown("""
     - **Analysis summary** — Your question, the answer, and key limitations
     - **Statistical results** — Estimates, confidence intervals, and test details
+    - **Assumption diagnostics** — Complete assumption check report
     - **Charts** — Visualizations from your analysis
     - **Data dictionary** — Column descriptions and quality flags
+    - **Quality issues** — Detected data quality problems
     - **Reproducibility files** — Recipe, run manifest, and software versions
     """)
 
-    # Simple options
+    # Options
     include_charts = st.checkbox("Include charts", value=True, key="export_include_charts")
     include_data = st.checkbox(
         "Include prepared data (CSV)",
@@ -60,16 +76,16 @@ def render_export(ws: Workspace) -> None:
         help="Warning: Includes potentially sensitive data from your analysis",
         key="export_include_data",
     )
+    include_assumptions = st.checkbox("Include assumption diagnostics", value=True, key="export_include_assumptions")
 
     st.divider()
 
     # Generate and download
     if st.button("📦 Prepare Report", type="primary", use_container_width=True):
         _generate_export(
-            ws, dataset_ref, import_spec, st.session_state.get("column_roles", []),
-            st.session_state.get("recipe", []), st.session_state.get("results"),
-            st.session_state.get("plots", []),
-            include_charts, include_data
+            ws, dataset_ref, import_spec, column_roles,
+            recipe, results, plots, assumption_report,
+            include_charts, include_data, include_assumptions
         )
 
     # Show download if ready
@@ -83,7 +99,7 @@ def render_export(ws: Workspace) -> None:
             st.session_state.get("export_include_charts", True),
             st.session_state.get("export_include_data", False),
         )
-        
+
         if st.session_state.get("export_signature") == current_signature:
             st.success("✅ Report ready!")
             st.download_button(
@@ -114,8 +130,10 @@ def _generate_export(
     recipe,
     results,
     plots: list,
+    assumption_report,
     include_charts: bool,
     include_data: bool,
+    include_assumptions: bool,
 ) -> None:
     """Generate the export bundle."""
     with st.spinner("Generating report..."):
@@ -134,6 +152,7 @@ def _generate_export(
                 profile=profile,
                 include_data=include_data,
                 plots=plots if include_charts else [],
+                assumption_report=assumption_report if include_assumptions else None,
             )
 
             # Read the zip file
@@ -141,7 +160,7 @@ def _generate_export(
 
             # Compute signature for validation
             signature = _compute_export_signature(
-                results, 
+                results,
                 st.session_state.get("recipe", []),
                 st.session_state.get("column_roles", []),
                 st.session_state.get("import_spec"),

@@ -195,6 +195,8 @@ def _execute_job(spec: JobSpec) -> Any:
             return _run_plotting(spec)
         if spec.job_type == "export":
             return _run_export(spec)
+        if spec.job_type == "discovery":
+            return _run_discovery(spec)
         raise JobError(f"Unknown job type: {spec.job_type}", job_id=spec.job_id)
 
     except CancellationError:
@@ -267,6 +269,33 @@ def _run_export(spec: JobSpec) -> dict[str, Any]:
     result = generate_export(ws, spec.payload)
 
     return {"export_path": result}
+
+
+def _run_discovery(spec: JobSpec) -> list[dict]:
+    """Run autonomous discovery job in background."""
+    from CleanSheet.engine.profiling import run_progressive_discovery
+    from CleanSheet.contracts import ColumnRole
+
+    ws = Workspace(spec.workspace_id)
+    
+    # Reconstruct column roles
+    column_roles = [ColumnRole(**cr) for cr in spec.payload.get("column_roles", [])]
+    recipe_steps = spec.payload.get("recipe_steps")
+    target_column = spec.payload.get("target_column")
+    
+    # Run discovery (no progress callback in background job)
+    candidates = run_progressive_discovery(
+        workspace=ws,
+        dataset_ref=spec.dataset_ref,
+        column_roles=column_roles,
+        recipe_steps=recipe_steps,
+        target_column=target_column,
+        progress_callback=None,
+        cancellation_token=None,
+    )
+    
+    # Convert to serializable format
+    return [c.model_dump() for c in candidates]
 
 
 def run_in_process(

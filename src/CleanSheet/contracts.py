@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
@@ -17,9 +17,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class SemanticRole(str, Enum):
     CONTINUOUS = "continuous"
-    CATEGORICAL = "categorical"
+    DISCRETE = "discrete"
     ORDINAL = "ordinal"
+    NOMINAL = "nominal"
+    BINARY = "binary"
     DATE = "date"
+    DATETIME = "datetime"
     IDENTIFIER = "identifier"
     FREE_TEXT = "free_text"
 
@@ -41,9 +44,15 @@ class StudyDesign(str, Enum):
     UNKNOWN = "unknown"
 
 
+class CollectionType(str, Enum):
+    OBSERVATIONAL = "observational"
+    EXPERIMENTAL = "experimental"
+
+
 class Goal(str, Enum):
     COMPARE_TWO_MEANS = "compare_two_means"
     COMPARE_PAIRED_MEANS = "compare_paired_means"
+    COMPARE_K_MEANS = "compare_k_means"
     EXPLORE_LINEAR_RELATIONSHIP = "explore_linear_relationship"
     EXPLORE_ORDERED_RELATIONSHIP = "explore_ordered_relationship"
     CATEGORICAL_ASSOCIATION = "categorical_association"
@@ -58,6 +67,11 @@ class Method(str, Enum):
     SPEARMAN_RHO = "spearman_rho"
     CHI2_INDEPENDENCE = "chi2_independence"
     FISHER_EXACT = "fisher_exact"
+    MANN_WHITNEY_U = "mann_whitney_u"
+    WILCOXON_SIGNED_RANK = "wilcoxon_signed_rank"
+    KRUSKAL_WALLIS = "kruskal_wallis"
+    DUNN_POSTHOC = "dunn_posthoc"
+    GAMES_HOWELL_POSTHOC = "games_howell_posthoc"
     DESCRIPTIVE = "descriptive"
 
 
@@ -66,6 +80,7 @@ class IntervalMethod(str, Enum):
     BOOTSTRAP_PERCENTILE = "bootstrap_percentile"
     BOOTSTRAP_BCA = "bootstrap_bca"
     PERMUTATION = "permutation"
+    HODGES_LEHMANN = "hodges_lehmann"
     NOT_COMPUTED = "not_computed"
     NOT_APPLICABLE = "not_applicable"
     BLOCKED = "blocked"
@@ -118,6 +133,9 @@ class TransformOp(str, Enum):
     IMPUTE = "impute"
     DROP_COLUMNS = "drop_columns"
     RECODE_CATEGORICAL = "recode_categorical"
+    TRIM_WHITESPACE = "trim_whitespace"
+    MERGE_CATEGORIES = "merge_categories"
+    FLAG_OUTLIERS = "flag_outliers"
 
 
 class PlotType(str, Enum):
@@ -129,6 +147,10 @@ class PlotType(str, Enum):
     CORRELATION_HEATMAP = "correlation_heatmap"
     MISSINGNESS_MATRIX = "missingness_matrix"
     ESTIMATE_INTERVAL = "estimate_interval"
+    RAINCLOUD = "raincloud"
+    STRIP_PLOT = "strip_plot"
+    PAIRED_SLOPE = "paired_slope"
+    SPAGHETTI = "spaghetti"
 
 
 class ExportFormat(str, Enum):
@@ -137,6 +159,13 @@ class ExportFormat(str, Enum):
     CSV = "csv"
     JSON = "json"
     PNG = "png"
+    SVG = "svg"
+
+
+class AnalysisMode(str, Enum):
+    GUIDED = "guided"
+    TARGET_SCAN = "target_scan"
+    AUTONOMOUS_DISCOVERY = "autonomous_discovery"
 
 
 class DatasetRef(BaseModel):
@@ -151,7 +180,7 @@ class DatasetRef(BaseModel):
     schema_hash: str = Field(..., description="Hash of column names + physical dtypes")
     row_count: int = Field(..., ge=0, description="Number of rows in source")
     column_count: int = Field(..., ge=0, description="Number of columns in source")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @classmethod
     def from_bytes(cls, data: bytes, workspace_id: str, fmt: Literal["csv", "parquet"]) -> DatasetRef:
@@ -194,6 +223,25 @@ class ImportSpec(BaseModel):
         return v
 
 
+class StudyContext(BaseModel):
+    """Study design context captured at upload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    row_independence: Literal["independent", "paired", "unknown"] = Field(
+        default="unknown",
+        description="Whether each row represents a separate unit or repeated measures",
+    )
+    collection_type: Literal["observational", "experimental"] = Field(
+        default="observational",
+        description="How the data was collected",
+    )
+    subject_id_column: str | None = Field(default=None, description="Column identifying repeated measures units")
+    confirmed_by_user: bool = Field(default=False)
+    auto_detected: bool = Field(default=False)
+    detection_notes: str | None = None
+
+
 class ColumnRole(BaseModel):
     """Semantic role assignment for a column."""
 
@@ -205,9 +253,12 @@ class ColumnRole(BaseModel):
     ordinal_order: list[str] | None = Field(default=None, description="Ordered categories if ordinal")
     confirmed: bool = Field(default=False, description="User confirmed this role")
     suggested_by: Literal["auto", "user"] = Field(default="auto")
+    confidence: Literal["high", "medium", "low"] = Field(default="medium")
+    ambiguity_reason: str | None = Field(default=None)
+    is_excluded: bool = Field(default=False, description="Excluded from statistical analysis")
 
 
-class TransformStep(BaseModel):
+class CleaningStep(BaseModel):
     """Single reversible transformation step."""
 
     model_config = ConfigDict(extra="forbid")
@@ -215,12 +266,13 @@ class TransformStep(BaseModel):
     step_id: int
     operation: TransformOp
     arguments: dict[str, Any] = Field(default_factory=dict)
-    input_schema: dict[str, PhysicalDtype]
-    output_schema: dict[str, PhysicalDtype]
+    input_schema: dict[str, str]
+    output_schema: dict[str, str]
     affected_row_count: int
     affected_column_count: int
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     reversible: bool = Field(default=True)
+    description: str = Field(default="")
 
 
 class AnalysisRequest(BaseModel):
@@ -266,6 +318,39 @@ class EligibilityResult(BaseModel):
     blocked_reason: str | None = None
 
 
+class AssumptionCheck(BaseModel):
+    """Single assumption diagnostic result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    passed: bool | None = None
+    value: float | None = None
+    threshold: float | None = None
+    message: str = ""
+    severity: Literal["info", "warning", "error"] = "info"
+
+
+class AssumptionReport(BaseModel):
+    """Complete assumption diagnostic report."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checks: list[AssumptionCheck] = Field(default_factory=list)
+    routing_explanation: str = ""
+    recommended_method: Method | None = None
+    fallback_method: Method | None = None
+    auto_routed: bool = False
+
+    @property
+    def all_passed(self) -> bool:
+        return all(c.passed is not False for c in self.checks if c.severity != "info")
+
+    @property
+    def has_errors(self) -> bool:
+        return any(c.severity == "error" and c.passed is False for c in self.checks)
+
+
 class StatisticalResult(BaseModel):
     """Complete statistical result from an analysis."""
 
@@ -281,10 +366,16 @@ class StatisticalResult(BaseModel):
     degrees_of_freedom: float | int | None = None
     p_value: float | None = None
     adjusted_p_value: float | None = None
+    q_value: float | None = None
+    m_comparisons: int = 1
     exclusions: dict[str, int] = Field(default_factory=dict)
     assumption_checks: dict[str, Any] = Field(default_factory=dict)
     effect_size: float | None = None
     effect_size_interpretation: str | None = None
+    effect_size_ci: tuple[float, float] | None = None
+    unstandardized_effect: float | None = None
+    unstandardized_effect_ci: tuple[float, float] | None = None
+    effect_magnitude_label: Literal["negligible", "small", "moderate", "large"] | None = None
 
 
 class PlotSpec(BaseModel):
@@ -317,7 +408,30 @@ class AnalysisResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     provenance: dict[str, Any] = Field(default_factory=dict)
     artifact_refs: dict[str, str] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class DiscoveryCandidate(BaseModel):
+    """Candidate finding from autonomous discovery."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    goal: Goal
+    variables: dict[str, str]
+    raw_p_value: float | None = None
+    q_value: float | None = None
+    effect_size: float | None = None
+    effect_magnitude: float | None = None
+    validity_score: float | None = None
+    relevance_score: float | None = None
+    interpretability_score: float | None = None
+    redundancy_penalty: float = 1.0
+    composite_score: float | None = None
+    eligibility: EligibilityResult | None = None
+    assumption_report: AssumptionReport | None = None
+    is_redundant: bool = False
+    reason: str = ""
 
 
 class RunManifest(BaseModel):
@@ -356,18 +470,20 @@ class SessionState(BaseModel):
     workspace_id: str
     dataset_ref: DatasetRef | None = None
     import_spec: ImportSpec | None = None
+    study_context: StudyContext | None = None
     column_roles: list[ColumnRole] = Field(default_factory=list)
-    recipe: list[TransformStep] = Field(default_factory=list)
+    recipe: list[CleaningStep] = Field(default_factory=list)
     recipe_hash: str | None = None
     current_stage: JobStatus = JobStatus.EMPTY
     analysis_plan: AnalysisRequest | None = None
+    analysis_mode: AnalysisMode = AnalysisMode.GUIDED
     active_job_id: str | None = None
     result_refs: dict[str, str] = Field(default_factory=dict)
-    last_activity: datetime = Field(default_factory=datetime.utcnow)
+    last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     stale_results: bool = Field(default=False)
 
 
-def compute_recipe_hash(recipe: list[TransformStep]) -> str:
+def compute_recipe_hash(recipe: list[CleaningStep]) -> str:
     """Compute deterministic hash of a transformation recipe."""
     serialized = json.dumps(
         [step.model_dump(mode="json") for step in recipe],

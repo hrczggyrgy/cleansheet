@@ -21,8 +21,8 @@ settings = get_settings()
 # Friendly step labels for user-facing navigation
 STEP_LABELS = {
     JobStatus.EMPTY.value: "1. Add data",
-    JobStatus.IMPORT_REVIEW.value: "2. Review data",
-    JobStatus.DATA_READY.value: "3. Prepare data (optional)",
+    JobStatus.IMPORT_REVIEW.value: "2. Study context & review",
+    JobStatus.DATA_READY.value: "3. Prepare data",
     JobStatus.PLAN_READY.value: "4. Ask a question",
     JobStatus.RUNNING.value: "5. Analyzing…",
     JobStatus.COMPLETE.value: "5. Understand results",
@@ -39,6 +39,7 @@ def init_session() -> None:
         st.session_state.current_stage = JobStatus.EMPTY.value
         st.session_state.dataset_ref = None
         st.session_state.import_spec = None
+        st.session_state.study_context = None
         st.session_state.column_roles = []
         st.session_state.recipe = []
         st.session_state.recipe_hash = None
@@ -52,6 +53,7 @@ def init_session() -> None:
         st.session_state.pending_analysis_request = None
         st.session_state.pending_import_spec = None
         st.session_state.show_reset_confirm = False
+        st.session_state.applied_fixes = set()
 
 
 def get_or_create_workspace() -> Workspace:
@@ -89,6 +91,7 @@ def reset_session(confirm: bool = False) -> None:
     st.session_state.current_stage = JobStatus.EMPTY.value
     st.session_state.dataset_ref = None
     st.session_state.import_spec = None
+    st.session_state.study_context = None
     st.session_state.column_roles = []
     st.session_state.recipe = []
     st.session_state.recipe_hash = None
@@ -101,6 +104,7 @@ def reset_session(confirm: bool = False) -> None:
     st.session_state.pending_analysis_request = None
     st.session_state.pending_import_spec = None
     st.session_state.show_reset_confirm = False
+    st.session_state.applied_fixes = set()
 
 
 def render_sidebar() -> None:
@@ -116,6 +120,13 @@ def render_sidebar() -> None:
             st.markdown("**Your data**")
             st.caption(f"{ref.row_count:,} rows × {ref.column_count} cols")
             st.caption(f"Format: {ref.format.upper()}")
+
+        # Study context
+        study_context = st.session_state.get("study_context")
+        if study_context:
+            st.markdown("**Study design**")
+            st.caption(f"Rows: {'Independent' if study_context.row_independence == 'independent' else 'Paired'}")
+            st.caption(f"Collection: {'Observational' if study_context.collection_type == 'observational' else 'Experimental'}")
 
         # Progress indicator with friendly labels
         stages = [

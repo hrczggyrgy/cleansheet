@@ -11,15 +11,138 @@ import polars as pl
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
+try:
+    from scipy.stats import bootstrap
+    HAS_BOOTSTRAP = True
+except ImportError:
+    HAS_BOOTSTRAP = False
+
+
+def _bootstrap_effect_size_ci(
+    group_first: np.ndarray,
+    group_second: np.ndarray,
+    effect_fn: callable,
+    confidence_level: float,
+    seed: int,
+    n_resamples: int = 2000,
+) -> tuple[float, float] | None:
+    """Bootstrap CI for a standardized effect size."""
+    if not HAS_BOOTSTRAP:
+        return None
+    try:
+        rng = np.random.default_rng(seed)
+        n1, n2 = len(group_first), len(group_second)
+        
+        def statistic(x1, x2):
+            return effect_fn(x1, x2)
+        
+        ci = bootstrap(
+            (group_first, group_second),
+            statistic,
+            confidence_level=confidence_level,
+            n_resamples=min(n_resamples, 2000),
+            method="percentile",
+            paired=False,
+            rng=rng,
+        )
+        return float(ci.confidence_interval.low), float(ci.confidence_interval.high)
+    except Exception:
+        return None
+
+
+def _bootstrap_paired_effect_size_ci(
+    diff: np.ndarray,
+    effect_fn: callable,
+    confidence_level: float,
+    seed: int,
+    n_resamples: int = 2000,
+) -> tuple[float, float] | None:
+    """Bootstrap CI for paired effect size."""
+    if not HAS_BOOTSTRAP:
+        return None
+    try:
+        rng = np.random.default_rng(seed)
+        
+        def statistic(x):
+            return effect_fn(x)
+        
+        ci = bootstrap(
+            (diff,),
+            statistic,
+            confidence_level=confidence_level,
+            n_resamples=min(n_resamples, 2000),
+            method="percentile",
+            rng=rng,
+        )
+        return float(ci.confidence_interval.low), float(ci.confidence_interval.high)
+    except Exception:
+        return None
+
+
+def _hedges_g(x1: np.ndarray, x2: np.ndarray) -> float:
+    """Compute Hedges' g for two independent groups."""
+    mean_diff = np.mean(x1) - np.mean(x2)
+    pooled_sd = np.sqrt(((len(x1)-1)*np.var(x1, ddof=1) + (len(x2)-1)*np.var(x2, ddof=1)) / (len(x1) + len(x2) - 2))
+    if pooled_sd == 0:
+        return 0.0
+    cohen_d = mean_diff / pooled_sd
+    n_total = len(x1) + len(x2)
+    hedges_correction = 1 - 3 / (4 * n_total - 9) if n_total > 2 else 1
+    return cohen_d * hedges_correction
+
+
+def _hedges_g_paired(diff: np.ndarray) -> float:
+    """Compute Hedges' g for paired data."""
+    mean_diff = np.mean(diff)
+    sd_diff = np.std(diff, ddof=1)
+    if sd_diff == 0:
+        return 0.0
+    cohen_d = mean_diff / sd_diff
+    n = len(diff)
+    hedges_correction = 1 - 3 / (4 * n - 1) if n > 1 else 1
+    return cohen_d * hedges_correction
+
+
+def _rank_biserial(x1: np.ndarray, x2: np.ndarray) -> float:
+    """Compute rank-biserial correlation for two independent groups."""
+    from scipy.stats import mannwhitneyu
+    n1, n2 = len(x1), len(x2)
+    u_stat = mannwhitneyu(x1, x2, alternative="two-sided").statistic
+    return (2 * u_stat) / (n1 * n2) - 1
+
+
+def _rank_biserial_paired(diff: np.ndarray) -> float:
+    """Compute matched rank-biserial correlation for paired data."""
+    from scipy.stats import wilcoxon
+    n = len(diff)
+    try:
+        result = wilcoxon(diff, alternative="two-sided", method="approx")
+        z_stat = stats.norm.ppf(1 - result.pvalue / 2) if result.pvalue < 0.5 else 0
+        return z_stat / np.sqrt(n) if n > 0 else 0
+    except Exception:
+        pos = np.sum(diff > 0)
+        neg = np.sum(diff < 0)
+        return (pos - neg) / n if n > 0 else 0
+
 from CleanSheet.config import get_settings
 from CleanSheet.contracts import (
     AnalysisRequest,
     AnalysisResult,
+    Goal,
     IntervalMethod,
     Method,
     StatisticalResult,
 )
+from CleanSheet.engine.assumptions import run_assumption_diagnostics
 from CleanSheet.engine.execution import LazyExecutor, get_prepared_lazy
+from CleanSheet.engine.nonparametric import (
+    DunnPosthocAdapter,
+    GamesHowellPosthocAdapter,
+    KruskalWallisAdapter,
+    MannWhitneyUAdapter,
+    WilcoxonSignedRankAdapter,
+    run_posthoc_if_needed,
+)
 from CleanSheet.errors import EligibilityError
 from CleanSheet.jobs.workspace import Workspace
 
@@ -88,8 +211,20 @@ class WelchTTestAdapter(TestAdapter):
         ci_low = mean_diff - t_crit * se
         ci_high = mean_diff + t_crit * se
 
+        # Hedges' g (bias-corrected Cohen's d)
         pooled_sd = np.sqrt(((len(group_first)-1)*np.var(group_first, ddof=1) + (len(group_second)-1)*np.var(group_second, ddof=1)) / (len(group_first) + len(group_second) - 2))
         cohen_d = mean_diff / pooled_sd if pooled_sd > 0 else 0
+
+        # Hedges' correction factor
+        n_total = len(group_first) + len(group_second)
+        hedges_correction = 1 - 3 / (4 * n_total - 9) if n_total > 2 else 1
+        hedges_g = cohen_d * hedges_correction
+
+        # Bootstrap CI for Hedges' g
+        effect_size_ci = _bootstrap_effect_size_ci(
+            group_first, group_second, _hedges_g,
+            request.confidence_level, request.seed
+        )
 
         return StatisticalResult(
             method=Method.WELCH_T,
@@ -101,55 +236,105 @@ class WelchTTestAdapter(TestAdapter):
             statistic=float(result.statistic),
             degrees_of_freedom=float(df_welch),
             p_value=float(result.pvalue),
-            effect_size=float(cohen_d),
-            effect_size_interpretation=_interpret_cohen_d(cohen_d),
+            effect_size=float(hedges_g),
+            effect_size_interpretation=_interpret_hedges_g(hedges_g),
+            effect_size_ci=effect_size_ci,
+            unstandardized_effect=float(mean_diff),
+            unstandardized_effect_ci=(float(ci_low), float(ci_high)),
+            effect_magnitude_label=_interpret_hedges_g(hedges_g),
             assumption_checks={
                 "normality_group1": _check_normality(group_first),
                 "normality_group2": _check_normality(group_second),
                 "variance_ratio": float(np.var(group_first, ddof=1) / np.var(group_second, ddof=1)) if np.var(group_second, ddof=1) > 0 else None,
+                "contrast": f"{first} minus {second}",
             },
         )
 
 
 class PairedTTestAdapter(TestAdapter):
-    """Paired samples t-test."""
+    """Paired samples t-test. Supports both long format (Subject_ID, Occasion, Outcome) 
+    and wide format (Subject_ID, Pre_Value, Post_Value)."""
 
     def __init__(self) -> None:
         super().__init__(Method.PAIRED_T, "Paired t-test")
 
     def run(self, df: pl.DataFrame, request: AnalysisRequest) -> StatisticalResult:
-        pair_col = request.variables["pair_id"]
-        outcome_col = request.variables["outcome"]
-        occasion_col = request.variables["occasion"]
+        pair_col = request.variables.get("pair_id")
         contrast = request.contrast
-
-        wide = df.pivot(
-            values=outcome_col,
-            index=pair_col,
-            on=occasion_col,
-        ).drop_nulls()
-
-        if wide.width < 3:
-            raise EligibilityError("Need at least two occasions for paired test")
-
-        occasion_cols = [c for c in wide.columns if c != pair_col]
-        if len(occasion_cols) != 2:
-            raise EligibilityError("Paired test requires exactly two occasions")
-
-        # Determine contrast order
-        if contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
-            first, second = occasion_cols[0], occasion_cols[1]
-        elif contrast and contrast.endswith(f"_minus_{occasion_cols[0]}") and contrast.startswith(f"{occasion_cols[1]}_"):
-            first, second = occasion_cols[1], occasion_cols[0]
+        
+        # Detect data format
+        is_wide_format = "pre_col" in request.variables and "post_col" in request.variables
+        
+        if is_wide_format:
+            # Wide format: Subject_ID, Pre_Value, Post_Value
+            pre_col = request.variables["pre_col"]
+            post_col = request.variables["post_col"]
+            
+            # Filter to complete pairs
+            data = df.filter(
+                pl.col(pre_col).is_not_null() &
+                pl.col(post_col).is_not_null() &
+                ~pl.col(pre_col).is_infinite() &
+                ~pl.col(post_col).is_infinite() &
+                ~pl.col(pre_col).is_nan() &
+                ~pl.col(post_col).is_nan()
+            )
+            
+            if len(data) < 2:
+                raise EligibilityError("Need at least 2 complete pairs")
+            
+            vals_pre = data[pre_col].to_numpy()
+            vals_post = data[post_col].to_numpy()
+            
+            # Contrast is already set as "post_col_minus_pre_col"
+            first, second = post_col, pre_col
+            vals_first = vals_post
+            vals_second = vals_pre
+            
+            # For reporting
+            first_label, second_label = post_col, pre_col
+            n_pairs = len(data)
+            
         else:
-            first, second = occasion_cols[0], occasion_cols[1]
+            # Long format: Subject_ID, Occasion, Outcome
+            outcome_col = request.variables["outcome"]
+            occasion_col = request.variables["occasion"]
+            pair_col = request.variables.get("pair_id")
+            
+            if not pair_col or not occasion_col or not outcome_col:
+                raise EligibilityError("Paired test requires pair_id, occasion, and outcome variables")
+            
+            wide = df.pivot(
+                values=outcome_col,
+                index=pair_col,
+                on=occasion_col,
+            ).drop_nulls()
+            
+            if wide.width < 3:
+                raise EligibilityError("Need at least two occasions for paired test")
+            
+            occasion_cols = [c for c in wide.columns if c != pair_col]
+            if len(occasion_cols) != 2:
+                raise EligibilityError("Paired test requires exactly two occasions")
+            
+            # Determine contrast order
+            if contrast and contrast.endswith(f"_minus_{occasion_cols[1]}") and contrast.startswith(f"{occasion_cols[0]}_"):
+                first, second = occasion_cols[0], occasion_cols[1]
+            elif contrast and contrast.endswith(f"_minus_{occasion_cols[0]}") and contrast.startswith(f"{occasion_cols[1]}_"):
+                first, second = occasion_cols[1], occasion_cols[0]
+            else:
+                first, second = occasion_cols[0], occasion_cols[1]
+            
+            vals_first = wide[first].to_numpy()
+            vals_second = wide[second].to_numpy()
+            
+            if len(vals_first) < 2:
+                raise EligibilityError("Need at least 2 complete pairs")
+            
+            n_pairs = len(vals_first)
+            first_label, second_label = first, second
 
-        vals_first = wide[first].to_numpy()
-        vals_second = wide[second].to_numpy()
-
-        if len(vals_first) < 2:
-            raise EligibilityError("Need at least 2 complete pairs")
-
+        # Common paired analysis
         diff = vals_first - vals_second
 
         result = stats.ttest_rel(vals_first, vals_second, alternative=request.alternative.value)
@@ -164,11 +349,29 @@ class PairedTTestAdapter(TestAdapter):
         ci_low = mean_diff - t_crit * se
         ci_high = mean_diff + t_crit * se
 
+        # Cohen's d_z for paired data
         cohen_d = mean_diff / np.std(diff, ddof=1) if np.std(diff, ddof=1) > 0 else 0
+
+        # Hedges' correction for paired
+        n = len(diff)
+        hedges_correction = 1 - 3 / (4 * n - 1) if n > 1 else 1
+        hedges_g = cohen_d * hedges_correction
+
+        # Bootstrap CI for Hedges' g
+        effect_size_ci = _bootstrap_paired_effect_size_ci(
+            diff, _hedges_g_paired,
+            request.confidence_level, request.seed
+        )
+
+        # Determine contrast label
+        if contrast and "_minus_" in contrast:
+            contrast_label = contrast.replace("_minus_", " minus ")
+        else:
+            contrast_label = f"{first_label} minus {second_label}"
 
         return StatisticalResult(
             method=Method.PAIRED_T,
-            group_counts={f"{first}": len(vals_first), f"{second}": len(vals_second)},
+            group_counts={f"{first_label}": len(vals_first), f"{second_label}": len(vals_second)},
             estimate=float(mean_diff),
             interval=(float(ci_low), float(ci_high)),
             interval_method=IntervalMethod.PARAMETRIC,
@@ -176,12 +379,17 @@ class PairedTTestAdapter(TestAdapter):
             statistic=float(result.statistic),
             degrees_of_freedom=df_paired,
             p_value=float(result.pvalue),
-            effect_size=float(cohen_d),
-            effect_size_interpretation=_interpret_cohen_d(cohen_d),
+            effect_size=float(hedges_g),
+            effect_size_interpretation=_interpret_hedges_g(hedges_g),
+            effect_size_ci=effect_size_ci,
+            unstandardized_effect=float(mean_diff),
+            unstandardized_effect_ci=(float(ci_low), float(ci_high)),
+            effect_magnitude_label=_interpret_hedges_g(hedges_g),
             assumption_checks={
                 "normality_differences": _check_normality(diff),
-                "n_pairs": len(diff),
-                "contrast": f"{first} minus {second}",
+                "n_pairs": n_pairs,
+                "contrast": contrast_label,
+                "data_format": "wide (pre/post columns)" if is_wide_format else "long (occasion column)",
             },
         )
 
@@ -235,6 +443,10 @@ class PearsonCorrelationAdapter(TestAdapter):
             p_value=float(result.pvalue),
             effect_size=float(r),
             effect_size_interpretation=_interpret_correlation(r),
+            effect_size_ci=(float(ci_low), float(ci_high)),
+            unstandardized_effect=float(r),
+            unstandardized_effect_ci=(float(ci_low), float(ci_high)),
+            effect_magnitude_label=_interpret_correlation(r),
             assumption_checks={
                 "linearity": "Assessed via scatterplot",
                 "normality_x": _check_normality(x),
@@ -294,6 +506,7 @@ class SpearmanCorrelationAdapter(TestAdapter):
             interval_method = IntervalMethod.NOT_COMPUTED
 
         ci_low, ci_high = None, None
+        interval_status = "not_computed"
         if n >= 10:
             try:
                 from scipy.stats import bootstrap
@@ -316,18 +529,24 @@ class SpearmanCorrelationAdapter(TestAdapter):
             interval_method = IntervalMethod.NOT_COMPUTED
             interval_status = "not_computed"
 
+        rho = float(result.statistic) if not use_permutation else rho_obs
+
         return StatisticalResult(
             method=Method.SPEARMAN_RHO,
             group_counts={"n": n},
-            estimate=float(result.statistic),
+            estimate=rho,
             interval=(ci_low, ci_high) if ci_low is not None else None,
             interval_method=interval_method,
             interval_status=interval_status,
-            statistic=float(result.statistic),
+            statistic=rho,
             degrees_of_freedom=None,
             p_value=p_value,
-            effect_size=float(result.statistic),
-            effect_size_interpretation=_interpret_correlation(result.statistic),
+            effect_size=rho,
+            effect_size_interpretation=_interpret_correlation(rho),
+            effect_size_ci=(ci_low, ci_high) if ci_low is not None else None,
+            unstandardized_effect=rho,
+            unstandardized_effect_ci=(ci_low, ci_high) if ci_low is not None else None,
+            effect_magnitude_label=_interpret_correlation(rho),
             assumption_checks={
                 "monotonicity": "Assessed via scatterplot",
                 "ties_x": int(len(x) - len(np.unique(x))),
@@ -379,6 +598,10 @@ class ChiSquareAdapter(TestAdapter):
             p_value=float(result.pvalue),
             effect_size=float(cramers_v),
             effect_size_interpretation=_interpret_cramers_v(cramers_v),
+            effect_size_ci=None,
+            unstandardized_effect=float(cramers_v),
+            unstandardized_effect_ci=None,
+            effect_magnitude_label=_interpret_cramers_v(cramers_v),
             assumption_checks={
                 "expected_counts": expected.tolist(),
                 "min_expected": float(expected.min()),
@@ -431,6 +654,10 @@ class FisherExactAdapter(TestAdapter):
             p_value=float(result.pvalue),
             effect_size=float(odds_ratio),
             effect_size_interpretation=_interpret_odds_ratio(odds_ratio),
+            effect_size_ci=None,
+            unstandardized_effect=float(odds_ratio),
+            unstandardized_effect_ci=None,
+            effect_magnitude_label=_interpret_odds_ratio(odds_ratio),
             assumption_checks={
                 "table": observed.tolist(),
                 "row_names": row_names,
@@ -462,6 +689,7 @@ class DescriptiveAdapter(TestAdapter):
         )
 
 
+# Register all adapters
 ADAPTERS: dict[Method, TestAdapter] = {
     Method.WELCH_T: WelchTTestAdapter(),
     Method.PAIRED_T: PairedTTestAdapter(),
@@ -469,6 +697,11 @@ ADAPTERS: dict[Method, TestAdapter] = {
     Method.SPEARMAN_RHO: SpearmanCorrelationAdapter(),
     Method.CHI2_INDEPENDENCE: ChiSquareAdapter(),
     Method.FISHER_EXACT: FisherExactAdapter(),
+    Method.MANN_WHITNEY_U: MannWhitneyUAdapter(),
+    Method.WILCOXON_SIGNED_RANK: WilcoxonSignedRankAdapter(),
+    Method.KRUSKAL_WALLIS: KruskalWallisAdapter(),
+    Method.DUNN_POSTHOC: DunnPosthocAdapter(),
+    Method.GAMES_HOWELL_POSTHOC: GamesHowellPosthocAdapter(),
     Method.DESCRIPTIVE: DescriptiveAdapter(),
 }
 
@@ -478,7 +711,9 @@ def run_analysis(
     dataset_ref: Any,
     request: AnalysisRequest,
     recipe_steps: list[dict[str, Any]] | None = None,
+    column_roles: list | None = None,
 ) -> AnalysisResult:
+    """Run statistical analysis with assumption diagnostics and post-hoc tests."""
     if recipe_steps is not None:
         lf = get_prepared_lazy(workspace, dataset_ref, recipe_steps)
         required_cols = list(set(request.variables.values()))
@@ -494,30 +729,68 @@ def run_analysis(
     if adapter is None:
         raise EligibilityError(f"No adapter for method: {method}")
 
+    # Build column roles dict for assumption diagnostics
+    roles_dict = {}
+    if column_roles:
+        for cr in column_roles:
+            roles_dict[cr.column] = cr.semantic_role
+    else:
+        # Infer from dtypes
+        for col in df.columns:
+            if df[col].dtype.is_numeric():
+                roles_dict[col] = Method  # placeholder
+
+    # Run assumption diagnostics
+    assumption_report = run_assumption_diagnostics(df, request, roles_dict)
+
+    # Run main analysis
     stat_result = adapter.run(df, request)
+
+    # Add assumption checks to result
+    for check in assumption_report.checks:
+        stat_result.assumption_checks[check.name] = check.model_dump()
 
     # Apply multiplicity correction if needed
     if request.multiplicity.get("method") != "none" and request.multiplicity.get("family_size", 1) > 1:
+        # This would be handled at a higher level for discovery mode
         pass
+
+    # Run post-hoc if omnibus test was significant
+    posthoc_result = None
+    if request.goal in (Goal.COMPARE_K_MEANS,):
+        posthoc_result = run_posthoc_if_needed(df, request, stat_result)
+
+    results = [stat_result]
+    if posthoc_result:
+        results.append(posthoc_result)
+
+    # Build provenance
+    provenance = {
+        "method": method.value,
+        "auto_routed": assumption_report.auto_routed,
+        "routing_explanation": assumption_report.routing_explanation,
+        "assumption_checks": [c.model_dump() for c in assumption_report.checks],
+        "seed": request.seed,
+    }
 
     # Wrap in AnalysisResult
     return AnalysisResult(
         run_id=hashlib.sha256(str(request.model_dump()).encode()).hexdigest()[:12],
         status="complete",
         request=request,
-        statistical_results=[stat_result],
+        statistical_results=results,
         plots=[],
         warnings=[],
-        provenance={},
+        provenance=provenance,
         artifact_refs={},
     )
 
 
-def _select_method(goal: str) -> Method:
-    from CleanSheet.contracts import Goal
+def _select_method(goal: Goal) -> Method:
     mapping = {
         Goal.COMPARE_TWO_MEANS: Method.WELCH_T,
         Goal.COMPARE_PAIRED_MEANS: Method.PAIRED_T,
+        Goal.COMPARE_K_MEANS: Method.WELCH_T,  # ANOVA - Welch's
         Goal.EXPLORE_LINEAR_RELATIONSHIP: Method.PEARSON_R,
         Goal.EXPLORE_ORDERED_RELATIONSHIP: Method.SPEARMAN_RHO,
         Goal.CATEGORICAL_ASSOCIATION: Method.CHI2_INDEPENDENCE,
@@ -536,14 +809,14 @@ def adjust_pvalues(
     return reject.tolist(), p_adj.tolist()
 
 
-def _interpret_cohen_d(d: float) -> str:
-    abs_d = abs(d)
-    if abs_d < 0.2:
+def _interpret_hedges_g(g: float) -> str:
+    abs_g = abs(g)
+    if abs_g < 0.2:
         return "negligible"
-    if abs_d < 0.5:
+    if abs_g < 0.5:
         return "small"
-    if abs_d < 0.8:
-        return "medium"
+    if abs_g < 0.8:
+        return "moderate"
     return "large"
 
 
@@ -554,7 +827,7 @@ def _interpret_correlation(r: float) -> str:
     if abs_r < 0.3:
         return "small"
     if abs_r < 0.5:
-        return "medium"
+        return "moderate"
     return "large"
 
 
@@ -564,7 +837,7 @@ def _interpret_cramers_v(v: float) -> str:
     if v < 0.3:
         return "small"
     if v < 0.5:
-        return "medium"
+        return "moderate"
     return "large"
 
 
@@ -578,7 +851,7 @@ def _interpret_odds_ratio(or_val: float) -> str:
     if abs_log < 0.5:
         return "small"
     if abs_log < 1.0:
-        return "medium"
+        return "moderate"
     return "large"
 
 

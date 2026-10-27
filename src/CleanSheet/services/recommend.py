@@ -153,6 +153,37 @@ ELIGIBILITY_GATES: dict[Goal, list[EligibilityGate]] = {
             check=lambda req, df, roles: len(df.columns) > 0,
         ),
     ],
+    Goal.COMPARE_K_MEANS: [
+        EligibilityGate(
+            rule_id="three_plus_groups",
+            description="At least three groups must be selected",
+            check=lambda req, df, roles: len(req.group_levels or []) >= 3,
+        ),
+        EligibilityGate(
+            rule_id="continuous_outcome",
+            description="Outcome must be continuous",
+            check=lambda req, df, roles: roles.get(req.variables.get("outcome", "")) in (
+                SemanticRole.CONTINUOUS, SemanticRole.DISCRETE, SemanticRole.ORDINAL
+            ),
+        ),
+        EligibilityGate(
+            rule_id="independent_design",
+            description="Study design must be independent",
+            check=lambda req, df, roles: req.study_design == StudyDesign.INDEPENDENT,
+        ),
+        EligibilityGate(
+            rule_id="sufficient_data",
+            description="Each group must have ≥5 finite observations",
+            check=lambda req, df, roles: _check_group_counts(req, df, min_per_group=5),
+            severity="error",
+        ),
+        EligibilityGate(
+            rule_id="non_constant",
+            description="Outcome must not be constant within groups",
+            check=lambda req, df, roles: _check_non_constant(req, df),
+            severity="warning",
+        ),
+    ],
 }
 
 

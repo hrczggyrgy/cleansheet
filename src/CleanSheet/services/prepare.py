@@ -8,7 +8,7 @@ from typing import Any
 import polars as pl
 
 from CleanSheet.config import get_settings
-from CleanSheet.contracts import DatasetRef, TransformOp, TransformStep
+from CleanSheet.contracts import CleaningStep, DatasetRef, TransformOp
 from CleanSheet.engine.execution import (
     LazyExecutor,
     build_preparation_pipeline,
@@ -23,7 +23,7 @@ class PreparationResult:
     """Result of a preparation operation."""
 
     data: pl.DataFrame
-    recipe: list[TransformStep]
+    recipe: list[CleaningStep]
     recipe_hash: str
     preview_before: pl.DataFrame
     preview_after: pl.DataFrame
@@ -32,8 +32,8 @@ class PreparationResult:
 
 def apply_transform(
     executor: LazyExecutor,
-    current_recipe: list[TransformStep],
-    new_step: TransformStep,
+    current_recipe: list[CleaningStep],
+    new_step: CleaningStep,
 ) -> PreparationResult:
     """Apply a new transformation step to the recipe."""
     # Build new recipe
@@ -65,7 +65,7 @@ def apply_transform(
     )
 
 
-def _summarize_step(step: TransformStep, before: pl.DataFrame, after: pl.DataFrame) -> str:
+def _summarize_step(step: CleaningStep, before: pl.DataFrame, after: pl.DataFrame) -> str:
     """Generate human-readable summary of a transformation."""
     op = step.operation
     args = step.arguments
@@ -112,10 +112,10 @@ def create_transform_step(
     output_schema: dict[str, str],
     affected_rows: int,
     affected_cols: int,
-) -> TransformStep:
+) -> CleaningStep:
     """Create a new transform step with metadata."""
     step_id = len(arguments)  # Will be overridden by caller
-    return TransformStep(
+    return CleaningStep(
         step_id=step_id,
         operation=operation,
         arguments=arguments,
@@ -187,14 +187,14 @@ def suggest_transformations(profile_result: Any) -> list[dict[str, Any]]:
 def get_prepared_data(
     workspace: Workspace,
     dataset_ref: DatasetRef,
-    recipe: list[TransformStep],
+    recipe: list[CleaningStep],
 ) -> pl.DataFrame:
     """Get prepared data, using cache if available."""
     recipe_dicts = [step.model_dump() for step in recipe]
     return get_or_create_prepared(workspace, dataset_ref, recipe_dicts)
 
 
-def undo_last_step(recipe: list[TransformStep]) -> list[TransformStep]:
+def undo_last_step(recipe: list[CleaningStep]) -> list[CleaningStep]:
     """Remove the last transformation step."""
     if not recipe:
         return []
@@ -203,7 +203,7 @@ def undo_last_step(recipe: list[TransformStep]) -> list[TransformStep]:
 
 def redo_step(
     executor: LazyExecutor,
-    recipe: list[TransformStep],
+    recipe: list[CleaningStep],
     step_index: int,
 ) -> PreparationResult:
     """Redo a step that was undone (re-apply from that point)."""

@@ -1,4 +1,4 @@
-"""Data preparation screen - Reversible transformations."""
+"""Data preparation screen - Reversible transformations with issue detection cards."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import streamlit as st
 
 from CleanSheet.contracts import (
     ColumnRole,
+    CleaningStep,
     JobStatus,
     SemanticRole,
     TransformOp,
@@ -19,13 +20,24 @@ from CleanSheet.services.prepare import (
     suggest_transformations,
 )
 from CleanSheet.services.profile import run_profiling
+from CleanSheet.ui.accessibility import (
+    render_skip_link,
+    set_page_main_content_id,
+    announce_to_screen_reader,
+    render_focus_visible_style,
+)
 
 
 def render_preparation(ws: Workspace) -> None:
-    """Render data preparation screen."""
+    """Render data preparation screen with issue detection cards."""
     dataset_ref = st.session_state.get("dataset_ref")
     column_roles = st.session_state.get("column_roles", [])
     recipe = st.session_state.get("recipe", [])
+
+    # Accessibility
+    render_skip_link()
+    render_focus_visible_style()
+    set_page_main_content_id()
 
     if dataset_ref is None:
         st.error("No dataset loaded.")
@@ -33,6 +45,7 @@ def render_preparation(ws: Workspace) -> None:
 
     st.title("🛠️ Prepare Data")
     st.caption("Apply reversible transformations. Each step can be undone.")
+    announce_to_screen_reader("Data preparation page loaded. Review and apply reversible transformations.")
 
     # Get executor and current data
     executor = LazyExecutor(ws, dataset_ref)
@@ -47,25 +60,18 @@ def render_preparation(ws: Workspace) -> None:
             col2.caption(f"Rows: {step.affected_row_count:,}")
             if col3.button("↩️ Undo", key=f"undo_{i}"):
                 st.session_state.recipe = recipe[:i]
+                announce_to_screen_reader(f"Undid step {i+1}: {step.operation.value}")
+                st.rerun()
                 st.rerun()
         st.divider()
+
+    # Data quality issue cards
+    profile = run_profiling(ws, dataset_ref)
+    _render_issue_cards(executor, recipe, current_df, column_roles, profile)
 
     # Data preview
     st.markdown("### Current Data Preview")
     st.dataframe(current_df.head(100).to_pandas(), hide_index=True, use_container_width=True)
-
-    # Suggested transformations
-    profile = run_profiling(ws, dataset_ref)
-    suggestions = suggest_transformations(profile)
-
-    if suggestions:
-        st.markdown("### Suggested Transformations")
-        for sug in suggestions:
-            with st.expander(f"💡 {sug['reason']} ({sug['priority']})"):
-                st.write(sug["reason"])
-                if st.button("Apply", key=f"suggest_{sug['operation']}_{hash(str(sug))}"):
-                    _apply_suggestion(executor, recipe, sug, current_df)
-                    st.rerun()
 
     # Manual transformations
     st.markdown("### Add Transformation")
@@ -104,6 +110,273 @@ def render_preparation(ws: Workspace) -> None:
             st.session_state.recipe = recipe
             st.session_state.current_stage = JobStatus.PLAN_READY
             st.rerun()
+
+
+def _render_issue_cards(
+    executor: LazyExecutor,
+    recipe: list[CleaningStep],
+    current_df: pl.DataFrame,
+    column_roles: list[ColumnRole],
+    profile,
+) -> None:
+    """Render data quality issue detection cards with one-click fixes."""
+    issues = profile.quality_issues
+
+    has_issues = any(issues.get(k) for k in ["duplicates", "constant_columns", "high_cardinality", "missingness", "numeric_issues"])
+
+    if not has_issues:
+        st.success("✅ No critical data quality issues detected.")
+        return
+
+    st.markdown("### 🔍 Data Quality Issues")
+
+    # Track applied fixes in session state
+    if "applied_fixes" not in st.session_state:
+        st.session_state.applied_fixes = set()
+
+    # 1. Exact Duplicate Rows
+    if issues.get("duplicates"):
+        for dup in issues["duplicates"]:
+            if dup["type"] == "full_row" and dup["count"] > 0:
+                fix_key = f"deduplicate_{dup['count']}"
+                _render_issue_card(
+                    title=f"🔄 {dup['count']} Exact Duplicate Row(s)",
+                    description=f"Found {dup['count']} completely identical rows across all columns.",
+                    fix_key=fix_key,
+                    fix_button_label="Remove Duplicates",
+                    on_fix=lambda: _apply_deduplicate(executor, recipe, current_df),
+                    fix_applied=fix_key in st.session_state.applied_fixes,
+                )
+
+    # 2. Constant Columns
+    if issues.get("constant_columns"):
+        const_cols = issues["constant_columns"]
+        fix_key = f"drop_constant_{len(const_cols)}"
+        _render_issue_card(
+            title=f"📋 {len(const_cols)} Constant Column(s)",
+            description=f"Columns with identical values: {', '.join(f'`{c}`' for c in const_cols)}",
+            fix_key=fix_key,
+            fix_button_label="Drop Constant Columns",
+            on_fix=lambda: _apply_drop_constant(executor, recipe, current_df, const_cols),
+            fix_applied=fix_key in st.session_state.applied_fixes,
+        )
+
+    # 3. High Missingness
+    if issues.get("missingness"):
+        high_missing = [m for m in issues["missingness"] if m["severity"] in ("high", "medium")]
+        if high_missing:
+            for m in high_missing:
+                fix_key = f"drop_missing_{m['column']}"
+                _render_issue_card(
+                    title=f"❓ High Missingness: `{m['column']}` ({m['null_pct']:.1f}%)",
+                    description=f"Column has {m['null_count']} missing values ({m['null_pct']:.1f}%). Consider dropping if not essential.",
+                    fix_key=fix_key,
+                    fix_button_label="Drop Column",
+                    on_fix=lambda col=m['column']: _apply_drop_column(executor, recipe, current_df, col),
+                    fix_applied=fix_key in st.session_state.applied_fixes,
+                )
+
+    # 4. Numeric Issues (NaN, Inf)
+    if issues.get("numeric_issues"):
+        for ni in issues["numeric_issues"]:
+            fix_key = f"fix_numeric_{ni['column']}_{ni['issue']}"
+            _render_issue_card(
+                title=f"⚠️ Numeric Issue: `{ni['column']}` ({ni['issue']}: {ni['count']})",
+                description=f"Column contains {ni['count']} {ni['issue'].lower()} values that may affect analysis.",
+                fix_key=fix_key,
+                fix_button_label="Drop Non-Finite Rows",
+                on_fix=lambda col=ni['column']: _apply_drop_nonfinite(executor, recipe, current_df, col),
+                fix_applied=fix_key in st.session_state.applied_fixes,
+            )
+
+    # 5. High Cardinality Categorical
+    if issues.get("high_cardinality"):
+        for hc in issues["high_cardinality"]:
+            fix_key = f"recode_cardinality_{hc['column']}"
+            _render_issue_card(
+                title=f"🏷️ High Cardinality: `{hc['column']}` ({hc['unique_count']} unique)",
+                description=f"Column has many categories. Consider grouping rare categories into 'Other'.",
+                fix_key=fix_key,
+                fix_button_label="Group Rare Categories",
+                on_fix=lambda col=hc['column']: _apply_group_rare(executor, recipe, current_df, col),
+                fix_applied=fix_key in st.session_state.applied_fixes,
+            )
+
+    # 6. Outlier Detection (using IQR)
+    _render_outlier_cards(executor, recipe, current_df, column_roles)
+
+
+def _render_issue_card(
+    title: str,
+    description: str,
+    fix_key: str,
+    fix_button_label: str,
+    on_fix: callable,
+    fix_applied: bool = False,
+) -> None:
+    """Render a single issue card with fix action."""
+    with st.container(border=True):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.markdown(f"**{title}**")
+            st.caption(description)
+        with col2:
+            if fix_applied:
+                st.success("✅ Applied")
+                if st.button("↩️ Undo", key=f"undo_{fix_key}"):
+                    # Remove from applied fixes and undo last recipe step
+                    st.session_state.applied_fixes.discard(fix_key)
+                    recipe = st.session_state.get("recipe", [])
+                    if recipe:
+                        st.session_state.recipe = recipe[:-1]
+                    st.rerun()
+            else:
+                if st.button(fix_button_label, key=f"fix_{fix_key}", type="primary"):
+                    on_fix()
+                    st.session_state.applied_fixes.add(fix_key)
+                    st.rerun()
+
+
+def _apply_deduplicate(executor, recipe, current_df):
+    """Apply deduplication step."""
+    step = create_transform_step(
+        TransformOp.DEDUPLICATE,
+        {"subset": None, "keep": "first"},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        current_df.height,
+        0,
+    )
+    step.step_id = len(recipe)
+    result = apply_transform(executor, recipe, step)
+    st.session_state.recipe = result.recipe
+
+
+def _apply_drop_constant(executor, recipe, current_df, const_cols):
+    """Drop constant columns."""
+    step = create_transform_step(
+        TransformOp.DROP_COLUMNS,
+        {"columns": const_cols},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        {c: str(current_df[c].dtype) for c in current_df.columns if c not in const_cols},
+        current_df.height,
+        len(const_cols),
+    )
+    step.step_id = len(recipe)
+    result = apply_transform(executor, recipe, step)
+    st.session_state.recipe = result.recipe
+
+
+def _apply_drop_column(executor, recipe, current_df, col):
+    """Drop a single column."""
+    step = create_transform_step(
+        TransformOp.DROP_COLUMNS,
+        {"columns": [col]},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        {c: str(current_df[c].dtype) for c in current_df.columns if c != col},
+        current_df.height,
+        1,
+    )
+    step.step_id = len(recipe)
+    result = apply_transform(executor, recipe, step)
+    st.session_state.recipe = result.recipe
+
+
+def _apply_drop_nonfinite(executor, recipe, current_df, col):
+    """Drop rows with non-finite values in a column."""
+    # Filter out NaN and Inf
+    step = create_transform_step(
+        TransformOp.FILTER,
+        {"expression": f"(pl.col('{col}').is_not_null() & ~pl.col('{col}').is_infinite() & ~pl.col('{col}').is_nan())"},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        current_df.height,
+        0,
+    )
+    step.step_id = len(recipe)
+    result = apply_transform(executor, recipe, step)
+    st.session_state.recipe = result.recipe
+
+
+def _apply_group_rare(executor, recipe, current_df, col):
+    """Group rare categories into 'Other'."""
+    # Find categories with < 5 observations
+    vc = current_df[col].value_counts()
+    rare = vc.filter(pl.col("count") < 5)[col].to_list()
+    if not rare:
+        st.info("No rare categories found (all have ≥5 observations)")
+        return
+
+    # Create recode mapping
+    mapping = {cat: "Other" for cat in rare}
+
+    step = create_transform_step(
+        TransformOp.RECODE_CATEGORICAL,
+        {"mapping": {col: mapping}},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        current_df.height,
+        1,
+    )
+    step.step_id = len(recipe)
+    result = apply_transform(executor, recipe, step)
+    st.session_state.recipe = result.recipe
+
+
+def _render_outlier_cards(executor, recipe, current_df, column_roles):
+    """Render outlier detection cards for continuous variables."""
+    continuous_roles = [cr for cr in column_roles if cr.semantic_role == SemanticRole.CONTINUOUS]
+
+    for cr in continuous_roles:
+        col = cr.column
+        if col not in current_df.columns:
+            continue
+
+        s = current_df[col]
+        if not s.dtype.is_numeric():
+            continue
+
+        finite = s.drop_nulls()
+        if len(finite) < 10:
+            continue
+
+        q1 = finite.quantile(0.25)
+        q3 = finite.quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - 3 * iqr
+        upper = q3 + 3 * iqr
+
+        outliers = finite.filter((pl.col(col) < lower) | (pl.col(col) > upper))
+        n_outliers = len(outliers)
+
+        if n_outliers > 0:
+            fix_key = f"outliers_{col}"
+            pct = n_outliers / len(finite) * 100
+
+            _render_issue_card(
+                title=f"📊 Outliers: `{col}` ({n_outliers} values, {pct:.1f}%)",
+                description=f"Values outside [{lower:.2f}, {upper:.2f}] (3×IQR). Range: {finite.min():.2f}–{finite.max():.2f}, IQR: [{q1:.2f}, {q3:.2f}]",
+                fix_key=fix_key,
+                fix_button_label="Flag & Exclude Outliers",
+                on_fix=lambda c=col, lo=lower, hi=upper: _apply_flag_outliers(executor, recipe, current_df, c, lo, hi),
+                fix_applied=fix_key in st.session_state.applied_fixes,
+            )
+
+
+def _apply_flag_outliers(executor, recipe, current_df, col, lower, upper):
+    """Flag outliers by adding a boolean column and optionally filtering."""
+    # Add outlier flag column
+    step = create_transform_step(
+        TransformOp.FLAG_OUTLIERS,
+        {"column": col, "lower": float(lower), "upper": float(upper), "flag_column": f"{col}_outlier"},
+        {c: str(current_df[c].dtype) for c in current_df.columns},
+        {**{c: str(current_df[c].dtype) for c in current_df.columns}, f"{col}_outlier": "Boolean"},
+        current_df.height,
+        1,
+    )
+    step.step_id = len(recipe)
+    result = apply_transform(executor, recipe, step)
+    st.session_state.recipe = result.recipe
 
 
 def _render_rename_tab(executor, recipe, current_df, column_roles):
